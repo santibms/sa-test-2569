@@ -176,6 +176,10 @@
   .adm { display: flex; align-items: center; gap: 8px; font-size: 14.5px; margin: 2px 0 10px; cursor: pointer; }
   .adm input { width: 18px; height: 18px; accent-color: var(--brand); }
   .dash-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; }
+  .sys-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; text-decoration: none; }
+  .closed { font-size: 13px; color: var(--muted); background: var(--label); padding: 6px 14px; border-top: 1px solid var(--line); }
+  .verset .dck { display: inline-flex; align-items: center; gap: 4px; margin-right: 4px; color: var(--ink); cursor: pointer; }
+  .verset .dck input { width: 16px; height: 16px; accent-color: var(--brand); }
   .dash-btn.on { background: var(--brand); border-color: var(--brand); color: #fff; }
 
   /* ---------------- แดชบอร์ด (ผู้ดูแล) ---------------- */
@@ -220,9 +224,10 @@
   .auth-theme .dot2[aria-pressed=true] { box-shadow: 0 0 0 2px var(--ink); }
 
   /* ---------------- แท็บเล็ต / มือถือ ---------------- */
+  @media (max-width: 1440px) { .brand span { display: none; } }
   @media (max-width: 1180px) {
     .menu-btn { display: inline-flex; }
-    .brand span, .prog .meter { display: none; }
+    .brand span, .prog .meter, .sys-btn span { display: none; }
     .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; }
     .side { position: fixed; z-index: 50; top: 0; left: 0; bottom: 0; width: min(360px, 88vw); max-height: none; padding: 14px; background: var(--desk);
             transform: translateX(-104%); transition: transform .22s ease; box-shadow: 0 0 30px rgba(0,0,0,.2); }
@@ -344,6 +349,8 @@
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       รายการข้อ <span id="menuCount"></span></button>
     <div class="brand"><b>BMS Smart Accounting</b><span>ระบบบันทึกผลการทดสอบ</span></div>
+    <a class="btn sys-btn" href="https://smart-accounting.bmscloud.in.th/" target="_blank" rel="noopener" title="เปิดระบบ Smart Accounting ในแท็บใหม่">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg><span>เปิดระบบ Smart Accounting</span></a>
     <span class="net" id="net" role="status" aria-live="polite"></span>
     <div class="prog"><span id="progText"></span><div class="meter"><i id="meter"></i></div></div>
     <button class="btn dash-btn" id="dashBtn" hidden><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h16M7 16v-4M11 16V8M15 16v-6M19 16V5"/></svg><span>แดชบอร์ดสรุปผล</span></button>
@@ -368,6 +375,7 @@
           <div class="fold"><button type="button" id="foldAll">ย่อทั้งหมด</button><button type="button" id="openAll">ขยายทั้งหมด</button></div>
         </div>
         <div class="list" id="toc"></div>
+        <div class="closed" id="closedNote" hidden></div>
         <div class="legend"><span class="p">ผ่าน</span><span class="f">ไม่ผ่าน</span><span class="b">ติดปัญหา</span><span class="t">ยังไม่ทำ</span></div>
       </nav>
       <div class="printbox">
@@ -387,6 +395,7 @@
     <div class="dash-hd">
       <div><h2>แดชบอร์ดสรุปผลการทดสอบ</h2><span class="muted" id="dTime"></span></div>
       <div class="dash-act">
+        <div class="verset" id="dDays">เปิดให้ทดสอบ</div>
         <label class="verset">รุ่นโปรแกรมปัจจุบัน <input id="dVer" placeholder="เช่น v1.179.0" aria-label="รุ่นโปรแกรมปัจจุบัน"><button class="btn" id="dVerSave">บันทึกรุ่น</button></label>
         <button class="btn" id="dRefresh">รีเฟรช</button><a class="btn" id="dSheet" target="_blank" rel="noopener">เปิด Google Sheet</a><button class="btn primary" id="dBack">กลับไปหน้าบันทึกผล</button></div>
     </div>

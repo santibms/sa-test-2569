@@ -78,8 +78,13 @@
       BUILTIN.forEach(c => { if (c.sysName === g && !hidden[c.code]) out.push(c); });
       extras.forEach(c => { if (c.sysName === g) out.push(c); });
     });
-    LIST = out;
+    // ผู้ทดสอบเห็นเฉพาะข้อของวันที่เปิดให้ทดสอบ (ผู้ดูแลเห็นทุกข้อ) ข้อที่บันทึกแล้วยังแสดงเสมอ
+    const days = openDays(), admin = session && session.user.role === 'admin';
+    LIST = out.filter(c => admin || !c.slot || days.some(d => c.slot.indexOf(d) === 0) || ((state && state.res[c.code]) || {}).v);
+    if (!LIST.length) LIST = out;
   }
+  const TEST_DAYS = ['5 ต.ค. 2569', '6 ต.ค. 2569', '7 ต.ค. 2569'];
+  function openDays() { const d = state && state.current && state.current.days; return d && d.length ? d : TEST_DAYS.slice(0, 1); }
   const idxOf = code => LIST.findIndex(c => c.code === code);
   const cur = () => LIST[Math.max(0, idxOf(state.code))] || LIST[0];
   const res = code => state.res[code] || (state.res[code] = {});
@@ -96,6 +101,10 @@
     return m ? m[1] + ' ต.ค. 2569' : DAYS[0];
   }
   function applyCurrent(cu) {
+    if (cu && cu.days && JSON.stringify(cu.days) !== JSON.stringify(state.current.days || [])) {
+      state.current.days = cu.days; persist();
+      if (session) { buildList(state.serverCases); if (!$('app').hidden) render(); }
+    }
     if (!cu || !cu.ver || state.current.ver === cu.ver) return;
     state.current.ver = cu.ver; persist();
     $('curVer').textContent = cu.ver;
@@ -274,7 +283,12 @@
       if (filtering) return;
       state.fold[b.dataset.g] = b.getAttribute('aria-expanded') === 'true'; persist(); renderToc();
     });
-    $('fDay').value = f.day || ''; $('fSt').value = f.st || '';
+    const admin = session.user.role === 'admin', days = admin ? TEST_DAYS : openDays();
+    $('fDay').innerHTML = '<option value="">' + (admin || days.length > 1 ? 'ทุกวัน' : 'วันที่เปิดทดสอบ') + '</option>' + days.map(d => `<option>${d}</option>`).join('');
+    $('fDay').value = days.indexOf(f.day) >= 0 ? f.day : ''; $('fSt').value = f.st || '';
+    const closed = TEST_DAYS.filter(d => openDays().indexOf(d) < 0);
+    $('closedNote').hidden = admin || !closed.length;
+    $('closedNote').textContent = 'ข้อของวันที่ ' + closed.map(d => d.replace(' 2569', '')).join(' และ ') + ' จะเปิดให้ทดสอบตามกำหนดการ';
     const a = $('toc').querySelector('[aria-current=true]');
     if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest' });
   }
@@ -499,7 +513,9 @@
     }
   }
   function renderDash() {
-    const d = dash, cases = d.cases.filter(c => c.show), codes = {}, names = {};
+    // นับเฉพาะข้อของวันที่เปิดให้ทดสอบ
+    const d = dash, od = (d.current.days && d.current.days.length) ? d.current.days : TEST_DAYS.slice(0, 1);
+    const cases = d.cases.filter(c => c.show && (!c.slot || od.some(x => c.slot.indexOf(x) === 0))), codes = {}, names = {};
     cases.forEach(c => { codes[c.code] = c; });
     d.testers.forEach(t => { names[t.username] = t.full; });
     const results = d.results.filter(r => codes[r.code]);
@@ -509,9 +525,12 @@
     const cnt = (list, v) => list.filter(r => r.v === v).length;
     const all = results.filter(r => r.v && people.some(p => p.username === r.user));
     const total = people.length * cases.length;
-    $('dTime').textContent = 'ข้อมูลล่าสุด ' + fmtDT(d.time) + ' น. · รีเฟรชอัตโนมัติทุก 1 นาที · รุ่นโปรแกรมปัจจุบัน ' + (d.current.ver || '-');
+    $('dTime').textContent = 'ข้อมูลล่าสุด ' + fmtDT(d.time) + ' น. · รีเฟรชอัตโนมัติทุก 1 นาที · นับเฉพาะข้อของวันที่เปิดให้ทดสอบ (' + od.map(x => x.replace(' 2569', '')).join(', ') + ')';
     $('dSheet').href = d.sheetUrl;
     if (document.activeElement !== $('dVer')) $('dVer').value = d.current.ver || '';
+    $('dDays').innerHTML = 'เปิดให้ทดสอบ ' + TEST_DAYS.map(x => `<label class="dck"><input type="checkbox" value="${x}" ${od.indexOf(x) >= 0 ? 'checked' : ''}>${x.replace(' 2569', '')}</label>`).join('')
+      + '<button class="btn" id="dDaysSave">บันทึกวัน</button>';
+    $('dDaysSave').onclick = saveDays;
     $('dKpi').innerHTML = [['ผู้ทดสอบ', people.length + ' ท่าน', ''], ['บันทึกผลแล้ว', `${all.length} / ${total}` + (total ? ` (${Math.round(all.length / total * 100)}%)` : ''), ''],
       ['ผ่าน', cnt(all, 'pass'), 'pass'], ['ไม่ผ่าน', cnt(all, 'fail'), 'fail'], ['ติดปัญหา', cnt(all, 'block'), 'block']]
       .map(([k, v, c]) => `<div class="kpi ${c}"><small>${k}</small><b>${v}</b></div>`).join('');
@@ -553,6 +572,15 @@
   $('dashBtn').onclick = () => ($('dash').hidden ? showDash() : hideDash());
   $('dBack').onclick = hideDash;
   $('dRefresh').onclick = loadDash;
+  async function saveDays() {
+    const days = [...document.querySelectorAll('#dDays input:checked')].map(i => i.value);
+    if (!days.length) return toast('เลือกอย่างน้อย 1 วัน');
+    try {
+      await call('setOpenDays', { token: session.token, days });
+      toast('เปิดให้ทดสอบ: ' + days.join(', ') + ' ผู้ทดสอบเห็นเมื่อรีเฟรชหน้าเว็บ');
+      await loadDash();
+    } catch (e) { if (e.code === 'AUTH') return expire(e.message); toast('บันทึกไม่สำเร็จ: ' + errText(e)); }
+  }
   $('dVerSave').onclick = async () => {
     const ver = $('dVer').value.trim();
     if (!ver) return toast('กรุณากรอกรุ่นโปรแกรม');
