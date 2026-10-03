@@ -68,7 +68,7 @@
       if (builtin[s.code]) { if (!s.show) hidden[s.code] = true; return; }
       if (!s.show || !s.code) return;
       const info = TYPE_INFO[s.type] ? s.type : 'Positive';
-      extras.push({ sys: 'X', sysName: s.sysName || 'ข้อทดสอบเพิ่มเติม', sec: 'ข้อทดสอบเพิ่มเติม (ทีม BMS เพิ่ม)', code: s.code, task: s.task, type: info,
+      extras.push({ sys: 'X', sysName: s.sysName || 'ข้อทดสอบเพิ่มเติม', sec: 'ข้อทดสอบเพิ่มเติม', code: s.code, task: s.task, type: info,
                     typeNote: '', slot: s.slot, menu: s.menu, pre: '', steps: String(s.steps || '').split('\n').map(x => x.trim()).filter(Boolean),
                     data: s.data, sample: [], items: null, jes: [], expect: s.expect, note: '', img: '', shotCap: '', extra: true });
     });
@@ -233,8 +233,10 @@
   }
   function renderNet() {
     const el = $('net');
-    if (!outbox.length) { el.className = 'net ok'; el.innerHTML = '✓ <span class="txt">บันทึกครบแล้ว</span>'; }
-    else if (netDown) { el.className = 'net down'; el.innerHTML = `⚠ <span class="txt">ออฟไลน์ · </span>รอส่ง ${outbox.length}`; }
+    const anySaved = state && Object.keys(state.res).some(k => state.res[k].t);
+    if (!outbox.length) { el.className = 'net ok'; el.hidden = !anySaved; el.innerHTML = '✓ <span class="txt">บันทึกเข้าระบบแล้ว</span>'; return; }
+    el.hidden = false;
+    if (netDown) { el.className = 'net down'; el.innerHTML = `⚠ <span class="txt">ออฟไลน์ · </span>รอส่ง ${outbox.length}`; }
     else { el.className = 'net wait'; el.innerHTML = `⏳ <span class="txt">กำลังส่ง </span>${outbox.length}`; }
   }
   // แถบรายการข้อ: ย่อ/ขยายตามระบบ และกรองตามวันหรือสถานะ
@@ -316,7 +318,7 @@
           ${row('ผู้ทดสอบ', 'ลงชื่อ ' + esc(session.user.full))}
           ${row('วันที่ทดสอบ / รุ่นโปรแกรม', `<div class="dv"><select id="day" aria-label="วันที่ทดสอบ">${DAYS.map(d => `<option ${d === day ? 'selected' : ''}>${d}</option>`).join('')}</select>
             <input id="ver" value="${esc(ver)}" placeholder="เช่น v1.178.0" aria-label="รุ่นโปรแกรม"></div>
-            <div class="hint">บันทึกแยกทุกข้อ ค่าเริ่มต้นคือรุ่นล่าสุดที่ทีม BMS แจ้ง ถ้าหน้าจอระบบแสดงรุ่นอื่นให้แก้ตามหน้าจอ</div>`)}
+            <div class="hint">บันทึกแยกทุกข้อ ค่าเริ่มต้นคือรุ่นที่ผู้ดูแลระบบกำหนด ถ้าหน้าจอระบบแสดงรุ่นอื่นให้แก้ตามหน้าจอ</div>`)}
         </tbody></table>
         <div class="saved" id="saved"></div>
       </section>`;
@@ -509,6 +511,7 @@
     const total = people.length * cases.length;
     $('dTime').textContent = 'ข้อมูลล่าสุด ' + fmtDT(d.time) + ' น. · รีเฟรชอัตโนมัติทุก 1 นาที · รุ่นโปรแกรมปัจจุบัน ' + (d.current.ver || '-');
     $('dSheet').href = d.sheetUrl;
+    if (document.activeElement !== $('dVer')) $('dVer').value = d.current.ver || '';
     $('dKpi').innerHTML = [['ผู้ทดสอบ', people.length + ' ท่าน', ''], ['บันทึกผลแล้ว', `${all.length} / ${total}` + (total ? ` (${Math.round(all.length / total * 100)}%)` : ''), ''],
       ['ผ่าน', cnt(all, 'pass'), 'pass'], ['ไม่ผ่าน', cnt(all, 'fail'), 'fail'], ['ติดปัญหา', cnt(all, 'block'), 'block']]
       .map(([k, v, c]) => `<div class="kpi ${c}"><small>${k}</small><b>${v}</b></div>`).join('');
@@ -550,6 +553,17 @@
   $('dashBtn').onclick = () => ($('dash').hidden ? showDash() : hideDash());
   $('dBack').onclick = hideDash;
   $('dRefresh').onclick = loadDash;
+  $('dVerSave').onclick = async () => {
+    const ver = $('dVer').value.trim();
+    if (!ver) return toast('กรุณากรอกรุ่นโปรแกรม');
+    const btn = $('dVerSave'); btn.disabled = true;
+    try {
+      await call('setCurrent', { token: session.token, ver });
+      toast('ตั้งรุ่นโปรแกรมปัจจุบันเป็น ' + ver + ' แล้ว ข้อที่ทดสอบหลังจากนี้จะใช้รุ่นนี้');
+      await loadDash();
+    } catch (e) { if (e.code === 'AUTH') return expire(e.message); toast('บันทึกรุ่นไม่สำเร็จ: ' + errText(e)); }
+    btn.disabled = false;
+  };
   $('dSysF').onchange = () => { if (dash) renderDash(); };
 
   // ======================================================================= ฉบับพิมพ์

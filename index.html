@@ -134,6 +134,7 @@
   thead th { background: var(--head); font-weight: 600; }
   td.n, th.n { text-align: right; white-space: nowrap; } tr.foot td { background: var(--label); font-weight: 600; }
   .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; } .scroll table { min-width: 520px; }
+  .card .scroll table { min-width: 0; } .card #dMatrix table, .card #dIssues table, .card #dLog table { min-width: 620px; }
   .cr { padding-left: 2em; display: inline-block; }
   ol { margin: 0; padding-left: 22px; } ol li { margin: 1px 0; }
   .tag { display: inline-block; padding: 0 8px; border-radius: 4px; font-weight: 600; font-size: 14px; margin-right: 6px; }
@@ -180,7 +181,10 @@
   .dash { max-width: 1320px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
   .dash-hd { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
   .dash-hd h2 { margin: 0; color: var(--brand-d); font-size: 24px; }
-  .dash-act { display: flex; gap: 8px; flex-wrap: wrap; } .dash-act a { text-decoration: none; }
+  .dash-act { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; } .dash-act a { text-decoration: none; }
+  .verset { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 3px 4px 3px 10px; }
+  .verset input { width: 120px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 15px; }
+  .verset .btn { min-height: 34px; padding: 4px 10px; }
   .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
   .kpi { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
   .kpi small { color: var(--muted); font-size: 13.5px; } .kpi b { display: block; font-size: 28px; line-height: 1.2; color: var(--ink); }
@@ -351,7 +355,7 @@
     <aside class="side" id="side" aria-label="ข้อทดสอบ">
       <div class="who">
         <div class="k">ผู้ทดสอบ</div><div class="name" id="whoName"></div><div class="muted" id="whoOrg"></div>
-        <div class="k" style="margin-top:6px">รุ่นโปรแกรมปัจจุบัน (ทีม BMS แจ้ง)</div><div class="ver" id="curVer">-</div>
+        <div class="k" style="margin-top:6px">รุ่นโปรแกรมปัจจุบัน</div><div class="ver" id="curVer">-</div>
       </div>
       <nav class="toc">
         <div class="search">
@@ -381,7 +385,9 @@
   <section class="dash" id="dash" hidden>
     <div class="dash-hd">
       <div><h2>แดชบอร์ดสรุปผลการทดสอบ</h2><span class="muted" id="dTime"></span></div>
-      <div class="dash-act"><button class="btn" id="dRefresh">รีเฟรช</button><a class="btn" id="dSheet" target="_blank" rel="noopener">เปิด Google Sheet</a><button class="btn primary" id="dBack">กลับไปหน้าบันทึกผล</button></div>
+      <div class="dash-act">
+        <label class="verset">รุ่นโปรแกรมปัจจุบัน <input id="dVer" placeholder="เช่น v1.179.0" aria-label="รุ่นโปรแกรมปัจจุบัน"><button class="btn" id="dVerSave">บันทึกรุ่น</button></label>
+        <button class="btn" id="dRefresh">รีเฟรช</button><a class="btn" id="dSheet" target="_blank" rel="noopener">เปิด Google Sheet</a><button class="btn primary" id="dBack">กลับไปหน้าบันทึกผล</button></div>
     </div>
     <div class="notice" id="dErr" hidden></div>
     <div class="kpis" id="dKpi"></div>
