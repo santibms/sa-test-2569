@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#4b5563" id="themeColor">
+<script>try { var t = localStorage.getItem('sa-theme'); if (t) document.documentElement.dataset.theme = JSON.parse(t); } catch (e) {}</script>
+<title>ระบบบันทึกผลการทดสอบ · BMS Smart Accounting</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230f766e'/%3E%3Cpath d='M6 18h12M8 15v-3M11 15V8M14 15v-5M17 15V6' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* สีธีม: ค่าเริ่มต้นไม่มีสี (โทนเทา) เลือกได้อีก 5 สี โทนอ่อนคำนวณจากสีหลัก */
+  :root { --brand: #4b5563; --brand-d: #374151; --brand-2: #6b7280; --ink: #1c2230; --muted: #5f6670; --paper: #fff;
+          --soft: color-mix(in srgb, var(--brand) 11%, #fff); --label: color-mix(in srgb, var(--brand) 7%, #fff);
+          --head: color-mix(in srgb, var(--brand) 15%, #fff); --line: color-mix(in srgb, var(--brand) 16%, #d7dbe0);
+          --desk: color-mix(in srgb, var(--brand) 7%, #eef0f2); --hover: color-mix(in srgb, var(--brand) 5%, #fff);
+          --ring: color-mix(in srgb, var(--brand) 18%, transparent);
+          --pass: #1e7e34; --fail: #b3261e; --block: #9a5b00; --warn-bg: #fff4e0; }
+  html[data-theme=teal]   { --brand: #0f766e; --brand-d: #0f665e; --brand-2: #14917f; }
+  html[data-theme=navy]   { --brand: #1f4e8c; --brand-d: #1b3f73; --brand-2: #2d64ad; }
+  html[data-theme=green]  { --brand: #2e7d4f; --brand-d: #256641; --brand-2: #3a9461; }
+  html[data-theme=plum]   { --brand: #6b4f8a; --brand-d: #563f70; --brand-2: #7f62a3; }
+  html[data-theme=bronze] { --brand: #8a6a3d; --brand-d: #715632; --brand-2: #a07d4a; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--desk); color: var(--ink); font: 16px/1.65 'Sarabun', 'Leelawadee UI', Tahoma, sans-serif; }
+  [hidden] { display: none !important; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  a { color: var(--brand-d); }
+
+  /* ---------------- เข้าสู่ระบบ / สมัครสมาชิก ---------------- */
+  .auth { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: linear-gradient(135deg, var(--soft), #fafbfb); }
+  .auth-card { width: min(940px, 100%); display: grid; grid-template-columns: 1fr 1.05fr; border-radius: 22px; overflow: hidden; background: #fff;
+               box-shadow: 0 1px 3px rgba(20,40,60,.08), 0 24px 60px rgba(20,40,60,.14); }
+  .auth-brand { background: linear-gradient(160deg, var(--brand), var(--brand-d)); color: #fff; padding: 44px 40px; display: flex; flex-direction: column;
+                justify-content: center; align-items: center; text-align: center; gap: 18px; }
+  .logo { width: 84px; height: 84px; border-radius: 22px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.28); display: grid; place-items: center; }
+  .logo svg { width: 40px; height: 40px; }
+  .auth-brand h1 { font-size: 30px; line-height: 1.35; margin: 0; font-weight: 700; }
+  .auth-brand p { margin: 0; font-size: 19px; font-weight: 600; color: rgba(255,255,255,.85); }
+  .auth-form { padding: 28px; display: grid; align-items: center; }
+  .auth-box { padding: 10px 14px; }
+  .avatar { width: 56px; height: 56px; border-radius: 14px; background: var(--soft); color: var(--brand); display: grid; place-items: center; margin: 0 auto 10px; }
+  .auth-box h2 { text-align: center; color: #1f2937; font-size: 24px; margin: 0; }
+  .lead { text-align: center; color: var(--muted); font-size: 14.5px; margin: 2px 0 18px; }
+  .fld { margin-bottom: 12px; }
+  .fld label { display: block; font-size: 14px; font-weight: 600; color: #1f2937; margin-bottom: 4px; }
+  .req { color: #e5484d; margin-right: 3px; }
+  .fld small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .inp { display: flex; align-items: center; gap: 8px; border: 1px solid #dfe3ea; background: #f8f9fb; border-radius: 10px; padding: 0 12px; }
+  .inp:focus-within { border-color: var(--brand); background: #fff; box-shadow: 0 0 0 3px var(--ring); }
+  .inp svg { color: #8a93a6; flex: none; }
+  .inp input { flex: 1; border: 0; background: transparent; font-size: 16px; padding: 10px 0; outline: none; min-width: 0; }
+  .eye { all: unset; cursor: pointer; color: #8a93a6; display: grid; place-items: center; padding: 6px; }
+  .err { color: #c0262d; font-size: 14px; min-height: 1.4em; margin: 2px 0 6px; }
+  .go { width: 100%; font-weight: 700; font-size: 16px; color: #fff; border: 0; border-radius: 10px; padding: 12px; cursor: pointer;
+        background: linear-gradient(90deg, var(--brand), var(--brand-2)); box-shadow: 0 6px 16px color-mix(in srgb, var(--brand) 28%, transparent); }
+  .go:disabled { opacity: .65; cursor: wait; }
+  .or { display: flex; align-items: center; gap: 10px; color: #9aa3b5; font-size: 13.5px; margin: 16px 0 10px; }
+  .or::before, .or::after { content: ''; flex: 1; height: 1px; background: #e3e7ef; }
+  .alt { width: 100%; font-weight: 600; font-size: 15px; color: var(--brand); background: #fff; border: 1px solid #d9dee8; border-radius: 10px; padding: 11px; cursor: pointer; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  .cfg { background: var(--warn-bg); color: #7a4a00; border: 1px dashed #e0a84a; border-radius: 8px; padding: 8px 10px; font-size: 13.5px; margin-bottom: 12px; }
+
+  /* ---------------- หน้าบันทึกผล ---------------- */
+  .bar { position: sticky; top: 0; z-index: 30; background: #fff; border-bottom: 1px solid var(--line); }
+  .bar .in { max-width: 1320px; margin: 0 auto; padding: 8px 20px; display: flex; align-items: center; gap: 14px; min-height: 56px; }
+  .menu-btn { display: none; white-space: nowrap; flex: none; align-items: center; gap: 8px; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 7px 12px; font-weight: 600; color: var(--brand-d); cursor: pointer; }
+  .brand { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand b { color: var(--brand-d); font-size: 17px; } .brand span { color: var(--muted); font-size: 14px; margin-left: 10px; }
+  .net { font-size: 13.5px; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
+  .net.ok { color: var(--pass); background: #e6f4ea; } .net.wait { color: #9a5b00; background: #fff1d6; } .net.down { color: #b3261e; background: #fdecea; }
+  .prog { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); white-space: nowrap; }
+  .meter { width: 120px; height: 6px; background: var(--head); border-radius: 99px; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--brand); transition: width .3s; }
+  .user { display: flex; align-items: center; gap: 8px; font-size: 14.5px; border-left: 1px solid var(--line); padding-left: 14px; white-space: nowrap; }
+  .av { width: 32px; height: 32px; border-radius: 50%; background: var(--soft); color: var(--brand-d); display: grid; place-items: center; font-weight: 700; font-size: 14px; flex: none; }
+  .logout { all: unset; cursor: pointer; color: var(--muted); font-size: 13.5px; text-decoration: underline; text-underline-offset: 3px; padding: 6px 2px; }
+
+  .layout { max-width: 1320px; margin: 0 auto; padding: 20px; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .side { position: sticky; top: 76px; max-height: calc(100vh - 92px); display: flex; flex-direction: column; gap: 12px; }
+  .who { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 14.5px; }
+  .who .k { font-size: 13px; color: var(--muted); } .who .name { font-weight: 600; } .who .ver { color: var(--brand-d); font-weight: 600; }
+  .toc { background: #fff; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+  .toc .search { padding: 8px 10px; border-bottom: 1px solid var(--label); }
+  .toc .search input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 15px; }
+  .toc .list { overflow: auto; padding: 4px 0 6px; overscroll-behavior: contain; }
+  .toc .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+  .toc .filters select { border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px; font-size: 14px; background: #fff; min-width: 0; }
+  .toc .fold { display: flex; justify-content: flex-end; gap: 12px; margin-top: 4px; }
+  .toc .fold button { all: unset; cursor: pointer; font-size: 13px; color: var(--brand-d); padding: 2px 0; }
+  .toc .grp { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: flex; align-items: center; gap: 6px; padding: 8px 14px 4px;
+              font-size: 13.5px; color: var(--muted); font-weight: 600; }
+  .toc .grp:hover { color: var(--ink); }
+  .toc .grp .chev { transition: transform .15s; flex: none; } .toc .grp[aria-expanded=false] .chev { transform: rotate(-90deg); }
+  .toc .grp .gn { flex: 1; } .toc .grp .gc { font-weight: 500; }
+  .toc .grp .gm { font-size: 12px; font-weight: 500; color: var(--brand-d); }
+  .toc .it { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-columns: 12px 74px 1fr; gap: 8px; align-items: center;
+                width: 100%; padding: 6px 14px; font-size: 14.5px; border-left: 3px solid transparent; }
+  .toc .it:hover { background: var(--hover); }
+  .toc .it[aria-current=true] { background: var(--soft); border-left-color: var(--brand); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #c8cfdb; }
+  .dot.pass { background: var(--pass); } .dot.fail { background: var(--fail); } .dot.block { background: #e09a24; }
+  .dot.pend { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #f0b44c; }
+  .toc .c { font-weight: 600; color: var(--brand-d); } .toc .tk { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); padding: 6px 14px 8px; border-top: 1px solid var(--label); }
+  .legend span::before { content: '●'; margin-right: 4px; }
+  .legend .p::before { color: var(--pass); } .legend .f::before { color: var(--fail); } .legend .b::before { color: #e09a24; } .legend .t::before { color: #c8cfdb; }
+  .printbox { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 9px 14px; cursor: pointer; border: 1px solid color-mix(in srgb, var(--brand) 30%, #c8ccd2); background: #fff; color: var(--brand-d);
+         display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .scrim { display: none; }
+
+  .notice { max-width: 880px; font-size: 14px; border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; background: var(--warn-bg); color: #7a4a00; border: 1px solid #f0d199; }
+  .welcome { max-width: 880px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--brand);
+             border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; }
+  .welcome .txt { flex: 1; min-width: 220px; } .welcome small { display: block; color: var(--muted); font-size: 13.5px; }
+  .welcome .x { all: unset; cursor: pointer; color: var(--muted); font-size: 22px; line-height: 1; padding: 4px 8px; }
+
+  .sheet { background: var(--paper); box-shadow: 0 1px 2px rgba(20,30,50,.08), 0 6px 24px rgba(20,30,50,.08); padding: 34px 46px 38px; max-width: 880px; border-radius: 2px; }
+  .sh-hd { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 4px; margin-bottom: 18px; }
+  .sheet h1 { font-size: 23px; color: var(--brand-d); margin: 0 0 14px; line-height: 1.35; } .sheet h1 .code { margin-right: 10px; }
+  figure { margin: 0 0 16px; } figure img { width: 100%; border: 1px solid var(--line); display: block; cursor: zoom-in; }
+  figcaption { text-align: center; font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; margin: 0 0 14px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; vertical-align: top; text-align: left; }
+  table.doc > tbody > tr > th, table.rt > tbody > tr > th { width: 27%; background: var(--label); color: var(--brand-d); font-weight: 600; }
+  thead th { background: var(--head); font-weight: 600; }
+  td.n, th.n { text-align: right; white-space: nowrap; } tr.foot td { background: var(--label); font-weight: 600; }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; } .scroll table { min-width: 520px; }
+  .cr { padding-left: 2em; display: inline-block; }
+  ol { margin: 0; padding-left: 22px; } ol li { margin: 1px 0; }
+  .tag { display: inline-block; padding: 0 8px; border-radius: 4px; font-weight: 600; font-size: 14px; margin-right: 6px; }
+  .tag.Positive { background: #e2f0d9; color: #375623; } .tag.Negative { background: #fbe5e5; color: #9c0006; } .tag.E2E { background: #e7e0f5; color: #4b2c83; }
+  .cap { font-weight: 700; color: var(--brand-d); font-size: 15px; margin: 6px 0 4px; }
+  .form { margin-top: 24px; scroll-margin-top: 80px; }
+  .checks { display: flex; flex-wrap: wrap; gap: 8px 26px; }
+  .ck { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; padding: 4px 0; }
+  .ck input { position: absolute; opacity: 0; pointer-events: none; }
+  .ck .box { width: 22px; height: 22px; border: 1.8px solid #556074; border-radius: 4px; display: grid; place-items: center; color: #fff; background: #fff; flex: none; }
+  .ck.on.pass .box { background: var(--pass); border-color: var(--pass); } .ck.on.fail .box { background: var(--fail); border-color: var(--fail); }
+  .ck.on.block .box { background: var(--block); border-color: var(--block); }
+  .ck .box svg { width: 15px; height: 15px; opacity: 0; } .ck.on .box svg { opacity: 1; }
+  .ck:focus-within .box { outline: 2px solid color-mix(in srgb, var(--brand) 45%, #fff); outline-offset: 2px; }
+  textarea { width: 100%; min-height: 84px; border: 0; resize: vertical; font-size: 16px; background: transparent; padding: 0; outline: none; }
+  .att { display: inline-flex; align-items: center; gap: 6px; color: var(--brand-d); cursor: pointer; font-weight: 600; padding: 4px 0; }
+  .att input { display: none; }
+  .hint { color: var(--muted); font-size: 13.5px; }
+  .atts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .atts img { height: 64px; border: 1px solid var(--line); border-radius: 4px; cursor: zoom-in; }
+  .atts a { font-size: 14px; }
+  .dv { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .dv select, .dv input { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 16px; background: #fff; }
+  .dv input { width: 150px; }
+  .saved { font-size: 14px; color: var(--muted); margin-top: 6px; min-height: 1.5em; }
+  .saved.ok { color: var(--pass); } .saved.wait { color: #9a5b00; } .saved.err { color: var(--fail); }
+  .pager { max-width: 880px; display: flex; justify-content: space-between; gap: 10px; margin: 16px 0 40px; }
+  .pager .pos { align-self: center; color: var(--muted); font-size: 14px; }
+  .muted { color: var(--muted); }
+  .zoom { position: fixed; inset: 0; z-index: 60; background: rgba(10,20,20,.85); display: grid; place-items: center; padding: 16px; cursor: zoom-out; }
+  .zoom img { max-width: 100%; max-height: calc(100% - 30px); background: #fff; cursor: zoom-in; }
+  .zoom.full { display: block; overflow: auto; cursor: zoom-out; }
+  .zoom.full img { max-width: none; max-height: none; cursor: zoom-out; }
+  .zoom .zhint { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); color: #e5f2ef; font-size: 13.5px; background: rgba(0,0,0,.45); padding: 3px 12px; border-radius: 99px; white-space: nowrap; }
+  .zoom .zx { position: fixed; top: 10px; right: 14px; color: #fff; font-size: 30px; line-height: 1; background: none; border: 0; cursor: pointer; padding: 4px 10px; }
+  .toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 70; background: #1f2937; color: #fff; padding: 8px 16px; border-radius: 10px; font-size: 14.5px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+
+  .adm { display: flex; align-items: center; gap: 8px; font-size: 14.5px; margin: 2px 0 10px; cursor: pointer; }
+  .adm input { width: 18px; height: 18px; accent-color: var(--brand); }
+  .dash-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; }
+  .dash-btn.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+  /* ---------------- แดชบอร์ด (ผู้ดูแล) ---------------- */
+  .dash { max-width: 1320px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+  .dash-hd { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+  .dash-hd h2 { margin: 0; color: var(--brand-d); font-size: 24px; }
+  .dash-act { display: flex; gap: 8px; flex-wrap: wrap; } .dash-act a { text-decoration: none; }
+  .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  .kpi { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+  .kpi small { color: var(--muted); font-size: 13.5px; } .kpi b { display: block; font-size: 28px; line-height: 1.2; color: var(--ink); }
+  .kpi.pass b { color: var(--pass); } .kpi.fail b { color: var(--fail); } .kpi.block b { color: #b8730a; }
+  .dgrid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+  .card h3 { margin: 0 0 10px; font-size: 16px; color: var(--brand-d); }
+  .card table { margin: 0; font-size: 14.5px; } .card th, .card td { padding: 6px 8px; }
+  .bar2 { height: 8px; border-radius: 99px; background: var(--head); overflow: hidden; display: flex; min-width: 90px; }
+  .bar2 i { display: block; height: 100%; } .bar2 .p { background: var(--pass); } .bar2 .f { background: var(--fail); } .bar2 .b { background: #e09a24; }
+  .mtools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 13.5px; color: var(--muted); }
+  .mtools select { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: #fff; }
+  .m { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: #eef2f1; color: #9aa5a3; font-weight: 700; font-style: normal; }
+  .m.pass { background: #e6f4ea; color: var(--pass); } .m.fail { background: #fdecea; color: var(--fail); } .m.block { background: #fff1d6; color: #b8730a; }
+  .mx td, .mx th { text-align: center; white-space: nowrap; } .mx td.l, .mx th.l { text-align: left; white-space: normal; min-width: 220px; }
+  .mx th.u { font-size: 13px; max-width: 120px; white-space: normal; }
+  .pill { font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 99px; white-space: nowrap; }
+  .pill.fail { background: #fdecea; color: var(--fail); } .pill.block { background: #fff1d6; color: #9a5b00; } .pill.pass { background: #e6f4ea; color: var(--pass); }
+  @media (max-width: 1000px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .dgrid { grid-template-columns: 1fr; } }
+  @media (max-width: 760px) { .dash { padding: 14px; } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dash-btn span { display: none; } }
+
+  .theme { position: relative; }
+  .theme-btn { all: unset; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--brand-d); border: 1px solid var(--line); background: #fff; }
+  .theme-pop { position: absolute; right: 0; top: 42px; z-index: 40; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px; width: 220px;
+               box-shadow: 0 10px 30px rgba(0,0,0,.15); }
+  .theme-pop h5 { margin: 2px 6px 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  .sw { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 8px; border-radius: 8px; font-size: 14.5px; }
+  .sw:hover { background: var(--hover); } .sw[aria-pressed=true] { background: var(--soft); font-weight: 600; }
+  .sw i { width: 20px; height: 20px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+  .auth-theme { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 14px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .auth-theme .dot2 { all: unset; cursor: pointer; width: 22px; height: 22px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.15); border: 2px solid #fff; }
+  .auth-theme .dot2[aria-pressed=true] { box-shadow: 0 0 0 2px var(--ink); }
+
+  /* ---------------- แท็บเล็ต / มือถือ ---------------- */
+  @media (max-width: 1180px) {
+    .menu-btn { display: inline-flex; }
+    .brand span, .prog .meter { display: none; }
+    .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+    .side { position: fixed; z-index: 50; top: 0; left: 0; bottom: 0; width: min(360px, 88vw); max-height: none; padding: 14px; background: var(--desk);
+            transform: translateX(-104%); transition: transform .22s ease; box-shadow: 0 0 30px rgba(0,0,0,.2); }
+    .side.open { transform: none; }
+    .scrim.open { display: block; position: fixed; inset: 0; z-index: 45; background: rgba(15,30,30,.35); }
+    .sheet, .welcome, .notice, .pager { max-width: none; }
+    .pager { position: sticky; bottom: 0; z-index: 20; margin: 0 -16px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--desk) 96%, transparent);
+             border-top: 1px solid var(--line); backdrop-filter: blur(6px); }
+    .pager .btn { min-height: 48px; min-width: 140px; }
+    .toc .it { padding: 10px 14px; } .toc .grp { padding: 12px 14px 6px; }
+  }
+  @media (pointer: coarse) {
+    .ck .box { width: 28px; height: 28px; } .ck { padding: 8px 0; }
+    .att { padding: 10px 0; } .dv select, .dv input { padding: 10px 12px; }
+  }
+  @media (max-width: 760px) {
+    .bar .in { padding: 8px 12px; gap: 8px; }
+    .user span#uname, .net .txt { display: none; }
+    .user { padding-left: 8px; }
+    .sheet { padding: 20px 16px; }
+    .sheet h1 { font-size: 20px; }
+    table.doc > tbody > tr > th, table.doc > tbody > tr > td, table.rt > tbody > tr > th, table.rt > tbody > tr > td { display: block; width: auto; border-top: 0; }
+    table.doc > tbody > tr:first-child > th, table.rt > tbody > tr:first-child > th { border-top: 1px solid var(--line); }
+    .auth-card { grid-template-columns: 1fr; } .auth-brand { padding: 22px; flex-direction: row; gap: 14px; text-align: left; }
+    .logo { width: 52px; height: 52px; border-radius: 14px; } .logo svg { width: 26px; height: 26px; }
+    .auth-brand h1 { font-size: 20px; } .auth-brand p { font-size: 15px; }
+    .auth-form { padding: 14px; } .auth-box { padding: 10px 6px; } .two { grid-template-columns: 1fr; }
+    .pager .btn { min-width: 0; flex: 1; } .pager .pos { display: none; }
+  }
+
+  /* ---------------- ฉบับพิมพ์ (รูปแบบเดียวกับเอกสาร Word) ---------------- */
+  #print-area { display: none; }
+  @page { size: A4; margin: 0; }
+  @media print {
+    body { background: #fff !important; color: #000; font: 11pt/1.45 'Sarabun', sans-serif; }
+    #auth, #app, .toast, .zoom { display: none !important; }
+    #print-area { display: block; }
+    .p-page { padding: 14mm 14mm 12mm 20mm; break-after: page; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+    .p-page:last-child { break-after: auto; }
+    .p-hd { display: flex; justify-content: space-between; gap: 12px; font-size: 8.5pt; color: #555; border-bottom: 1px solid #bbb; padding-bottom: 2px; margin-bottom: 8px; }
+    .p-title { font-size: 14pt; font-weight: 700; color: #1f3864; margin: 2px 0 6px; }
+    .p table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin: 2px 0 8px; }
+    .p th, .p td { border: 1px solid #9aa3b5; padding: 2px 6px; vertical-align: top; text-align: left; }
+    .p tr { break-inside: avoid; }
+    .p th.l { width: 26%; background: #eef1f7; color: #1f3864; font-weight: 600; }
+    .p thead th { background: #d9e2f3; font-weight: 600; }
+    .p td.n, .p th.n { text-align: right; white-space: nowrap; }
+    .p tr.foot td { background: #eef1f7; font-weight: 600; }
+    .p ol { margin: 0; padding-left: 18px; }
+    .p .tag { font-size: 10pt; padding: 0 5px; }
+    .p .cap { font-weight: 700; color: #1f3864; font-size: 10.5pt; margin: 6px 0 2px; break-after: avoid; }
+    .p .blk, .p .box { break-inside: avoid; }
+    .p figure { margin: 0 0 6px; text-align: center; }
+    .p figure img { max-width: 100%; max-height: 80mm; border: 1px solid #bbb; width: auto; }
+    .p figcaption { font-size: 9.5pt; color: #555; }
+    .p .box th.l { width: 24%; }
+    .p .mark { margin-right: 16px; white-space: nowrap; }
+    .p .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 30px; text-align: center; line-height: 2; break-inside: avoid; }
+    .p .dots { display: inline-block; min-width: 55%; border-bottom: 1px dotted #000; }
+    .p .sum td, .p .sum th { font-size: 9.5pt; }
+  }
+</style>
+</head>
+<body>
+<!-- ===================== เข้าสู่ระบบ / สมัครสมาชิก ===================== -->
+<div class="auth" id="auth" hidden>
+  <div class="auth-card">
+    <section class="auth-brand">
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h16M7 16v-4M11 16V8M15 16v-6M19 16V5"/></svg></div>
+      <h1>ระบบบันทึกผลการทดสอบ</h1>
+      <p>BMS Smart Accounting</p>
+    </section>
+    <section class="auth-form">
+      <form class="auth-box" id="loginForm" autocomplete="on" novalidate>
+        <div class="avatar"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></div>
+        <h2>เข้าสู่ระบบ</h2><p class="lead">กรุณากรอกข้อมูลเพื่อเข้าใช้งาน</p>
+        <div class="cfg" id="cfgWarn" hidden>ยังไม่ได้ตั้งค่าที่อยู่ระบบหลังบ้าน (ไฟล์ config.js) จึงยังเข้าระบบไม่ได้</div>
+        <div class="fld"><label for="lu"><span class="req">*</span>ชื่อผู้ใช้</label>
+          <div class="inp"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+            <input id="lu" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="กรอกชื่อผู้ใช้"></div></div>
+        <div class="fld"><label for="lp"><span class="req">*</span>รหัสผ่าน</label>
+          <div class="inp"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            <input id="lp" type="password" autocomplete="current-password" placeholder="กรอกรหัสผ่าน">
+            <button type="button" class="eye" data-for="lp" aria-label="แสดงรหัสผ่าน"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+        <div class="err" id="lerr" role="alert"></div>
+        <button class="go" type="submit" id="loginBtn">เข้าสู่ระบบ</button>
+        <div class="or">ยังไม่มีบัญชี?</div>
+        <button class="alt" type="button" id="toReg">สมัครสมาชิกใหม่</button>
+      </form>
+      <form class="auth-box" id="regForm" hidden autocomplete="off" novalidate>
+        <h2>สมัครสมาชิก</h2><p class="lead">สำหรับผู้ตรวจสอบบัญชีที่ได้รับรหัสเชิญจากทีม BMS</p>
+        <div class="fld"><label for="rn"><span class="req">*</span>ชื่อ-นามสกุล</label><div class="inp"><input id="rn" placeholder="เช่น นางสาวกาญจนาภรณ์ ศรีสวัสดิ์"></div>
+          <small>ใช้แสดงในช่องลงชื่อของเอกสารผลการทดสอบ</small></div>
+        <div class="fld"><label for="ro">หน่วยงาน</label><div class="inp"><input id="ro" placeholder="เช่น สำนักงานตรวจสอบบัญชี ..."></div></div>
+        <div class="two">
+          <div class="fld"><label for="ru"><span class="req">*</span>ชื่อผู้ใช้</label><div class="inp"><input id="ru" autocapitalize="none" spellcheck="false" placeholder="a-z, 0-9 อย่างน้อย 3 ตัว"></div></div>
+          <div class="fld"><label for="ri"><span class="req">*</span>รหัสเชิญ</label><div class="inp"><input id="ri" autocapitalize="none" spellcheck="false" placeholder="ได้จากทีม BMS"></div></div>
+          <div class="fld"><label for="rp"><span class="req">*</span>รหัสผ่าน</label><div class="inp"><input id="rp" type="password" autocomplete="new-password" placeholder="อย่างน้อย 6 ตัว">
+            <button type="button" class="eye" data-for="rp" aria-label="แสดงรหัสผ่าน"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+          <div class="fld"><label for="rp2"><span class="req">*</span>ยืนยันรหัสผ่าน</label><div class="inp"><input id="rp2" type="password" autocomplete="new-password" placeholder="พิมพ์ซ้ำอีกครั้ง"></div></div>
+        </div>
+        <label class="adm"><input type="checkbox" id="radm"> สมัครเป็นผู้ดูแลระบบ (เห็นแดชบอร์ดสรุปผลของผู้ทดสอบทุกท่าน)</label>
+        <div class="fld" id="radmBox" hidden><label for="rac"><span class="req">*</span>รหัสผู้ดูแล</label>
+          <div class="inp"><input id="rac" autocapitalize="none" spellcheck="false" placeholder="ทีม BMS เป็นผู้แจ้ง"></div></div>
+        <div class="err" id="rerr" role="alert"></div>
+        <button class="go" type="submit" id="regBtn">สมัครสมาชิก</button>
+        <div class="or">มีบัญชีแล้ว?</div>
+        <button class="alt" type="button" id="toLogin">เข้าสู่ระบบ</button>
+      </form>
+    </section>
+  </div>
+  <div class="auth-theme" id="authTheme"></div>
+</div>
+
+<!-- ===================== หน้าบันทึกผล ===================== -->
+<div id="app" hidden>
+  <header class="bar"><div class="in">
+    <button class="menu-btn" id="menuBtn" aria-controls="side" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      รายการข้อ <span id="menuCount"></span></button>
+    <div class="brand"><b>BMS Smart Accounting</b><span>ระบบบันทึกผลการทดสอบ</span></div>
+    <span class="net" id="net" role="status" aria-live="polite"></span>
+    <div class="prog"><span id="progText"></span><div class="meter"><i id="meter"></i></div></div>
+    <button class="btn dash-btn" id="dashBtn" hidden><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h16M7 16v-4M11 16V8M15 16v-6M19 16V5"/></svg><span>แดชบอร์ดสรุปผล</span></button>
+    <div class="theme"><button class="theme-btn" id="themeBtn" aria-label="เลือกสีธีม" title="เลือกสีธีม" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.9 1.2-1.8-.5-1.1.2-2.2 1.4-2.2H17a4 4 0 0 0 4-4c0-5-4-10-9-10z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg></button>
+      <div class="theme-pop" id="themePop" hidden><h5>สีธีม (จำไว้ในเครื่องนี้)</h5><div id="themeList"></div></div></div>
+    <div class="user"><span class="av" id="av"></span><span id="uname"></span><button class="logout" id="logout">ออกจากระบบ</button></div>
+  </div></header>
+  <div class="layout">
+    <aside class="side" id="side" aria-label="ข้อทดสอบ">
+      <div class="who">
+        <div class="k">ผู้ทดสอบ</div><div class="name" id="whoName"></div><div class="muted" id="whoOrg"></div>
+        <div class="k" style="margin-top:6px">รุ่นโปรแกรมปัจจุบัน (ทีม BMS แจ้ง)</div><div class="ver" id="curVer">-</div>
+      </div>
+      <nav class="toc">
+        <div class="search">
+          <input id="q" type="search" placeholder="ค้นหาข้อ เช่น AP-20 หรือ วางบิล" aria-label="ค้นหาข้อทดสอบ">
+          <div class="filters">
+            <select id="fDay" aria-label="แสดงตามวัน"><option value="">ทุกวัน</option><option>5 ต.ค. 2569</option><option>6 ต.ค. 2569</option><option>7 ต.ค. 2569</option></select>
+            <select id="fSt" aria-label="แสดงตามสถานะ"><option value="">ทุกสถานะ</option><option value="todo">ยังไม่ทำ</option><option value="done">ทำแล้ว</option><option value="bad">ไม่ผ่าน / ติดปัญหา</option></select>
+          </div>
+          <div class="fold"><button type="button" id="foldAll">ย่อทั้งหมด</button><button type="button" id="openAll">ขยายทั้งหมด</button></div>
+        </div>
+        <div class="list" id="toc"></div>
+        <div class="legend"><span class="p">ผ่าน</span><span class="f">ไม่ผ่าน</span><span class="b">ติดปัญหา</span><span class="t">ยังไม่ทำ</span></div>
+      </nav>
+      <div class="printbox">
+        <button class="btn" id="printSum">พิมพ์สรุปผล</button>
+        <button class="btn" id="printAll">พิมพ์ทั้งเล่ม</button>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+    <main>
+      <div class="notice" id="notice" hidden></div>
+      <div class="welcome" id="welcome" hidden></div>
+      <article class="sheet" id="sheet"></article>
+      <div class="pager"><button class="btn" id="prev">‹ ข้อก่อนหน้า</button><span class="pos" id="pos"></span><button class="btn primary" id="next">ข้อถัดไป ›</button></div>
+    </main>
+  </div>
+  <section class="dash" id="dash" hidden>
+    <div class="dash-hd">
+      <div><h2>แดชบอร์ดสรุปผลการทดสอบ</h2><span class="muted" id="dTime"></span></div>
+      <div class="dash-act"><button class="btn" id="dRefresh">รีเฟรช</button><a class="btn" id="dSheet" target="_blank" rel="noopener">เปิด Google Sheet</a><button class="btn primary" id="dBack">กลับไปหน้าบันทึกผล</button></div>
+    </div>
+    <div class="notice" id="dErr" hidden></div>
+    <div class="kpis" id="dKpi"></div>
+    <div class="dgrid">
+      <div class="card"><h3>ความคืบหน้าของผู้ทดสอบ</h3><div class="scroll" id="dTesters"></div></div>
+      <div class="card"><h3>ผลรวมตามระบบ (ทุกท่านรวมกัน)</h3><div class="scroll" id="dSys"></div></div>
+    </div>
+    <div class="card"><h3>ข้อที่ไม่ผ่าน / ติดปัญหา <span class="muted" id="dIssueN"></span></h3><div class="scroll" id="dIssues"></div></div>
+    <div class="card"><h3>ผลรายข้อ × ผู้ทดสอบ</h3>
+      <div class="mtools"><select id="dSysF" aria-label="เลือกระบบ"></select><span class="mleg"><b class="m pass">✓</b> ผ่าน <b class="m fail">✗</b> ไม่ผ่าน <b class="m block">!</b> ติดปัญหา <b class="m">·</b> ยังไม่ทำ · ชี้ที่ช่องเพื่อดูผลที่ได้จริง</span></div>
+      <div class="scroll" id="dMatrix"></div></div>
+    <div class="card"><h3>กิจกรรมล่าสุด</h3><div class="scroll" id="dLog"></div></div>
+  </section>
+  <div class="zoom" id="zoom" hidden role="dialog" aria-label="ภาพขยาย"><img alt=""><button class="zx" aria-label="ปิด">×</button><div class="zhint">คลิกที่ภาพเพื่อดูขนาดจริง · คลิกพื้นหลัง หรือกด Esc เพื่อปิด</div></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<div id="print-area"></div>
+
+<script src="config.js"></script>
+<script src="cases.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

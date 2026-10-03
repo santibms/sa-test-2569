@@ -1,0 +1,645 @@
+/* ระบบบันทึกผลการทดสอบ BMS Smart Accounting · หน้าเว็บ
+ * ข้อมูลข้อทดสอบมาจาก cases.js (สร้างจาก tools/build_web_app.py) + ข้อที่แอดมินเพิ่มในแท็บ "ข้อทดสอบ" ของ Google Sheet
+ * ผลการทดสอบส่งไป Google Apps Script (config.js) ทุกครั้งที่เลือกผลหรือพิมพ์ ถ้าเน็ตหลุดจะเก็บไว้ในเครื่องแล้วส่งให้เองภายหลัง
+ */
+(function () {
+  'use strict';
+  const API = String((window.SA_CONFIG || {}).API_URL || '').trim();
+  const DATA = window.SA_DATA;
+  const BUILTIN = DATA.cases;
+  const LABEL = { pass: 'ผ่าน', fail: 'ไม่ผ่าน', block: 'ติดปัญหา (ทดสอบต่อไม่ได้)' };
+  const SHORT = { pass: 'ผ่าน', fail: 'ไม่ผ่าน', block: 'ติดปัญหา' };
+  const DAYS = ['5 ต.ค. 2569', '6 ต.ค. 2569', '7 ต.ค. 2569', '8 ต.ค. 2569'];
+  // คำอธิบายประเภทโจทย์ และเกณฑ์ตัดสินผล
+  const TYPE_INFO = {
+    Positive: { what: 'ใช้งานปกติ ทำรายการตามขั้นตอนด้วยข้อมูลที่ถูกต้อง ระบบต้องทำได้และให้ผลตามที่คาดหวัง',
+                pass: 'ทำได้ครบทุกขั้น และผลบนหน้าจอ / การบันทึกบัญชีตรงกับผลที่คาดหวัง',
+                fail: 'ทำไม่ได้ หรือผลไม่ตรงกับที่คาดหวัง' },
+    Negative: { what: 'ลองทำสิ่งที่ผิดหรือทำซ้ำโดยตั้งใจ ระบบต้องป้องกัน ไม่ให้บันทึก หรือแจ้งเตือน',
+                pass: 'ระบบป้องกันได้ (ไม่ให้ทำ หรือแจ้งเตือน) ตามที่คาดหวัง',
+                fail: 'ระบบยอมให้ทำรายการที่ผิด/ซ้ำได้ โดยไม่ป้องกันหรือไม่แจ้งเตือน' },
+    E2E:      { what: 'ทดสอบทั้งวงจรงาน ทำต่อเนื่องหลายขั้นตั้งแต่ต้นจนจบ ข้อมูลต้องเชื่อมถึงกันทุกขั้น',
+                pass: 'ทุกขั้นทำได้ ข้อมูลส่งต่อถูกต้อง และยอดสุดท้ายตรงกับที่คาดหวัง',
+                fail: 'มีขั้นใดขั้นหนึ่งผิด (ระบุขั้นที่ผิดในช่องผลที่ได้จริง)' },
+  };
+  const BLOCK_INFO = 'ทดสอบต่อไม่ได้ด้วยเหตุอื่นที่ไม่ใช่ผลของข้อนี้ เช่น ไม่มีข้อมูลตั้งต้น ระบบเข้าไม่ได้ หรือข้อก่อนหน้ายังไม่ผ่าน';
+  const ICON = {
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    clip: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7L10.2 17a1.7 1.7 0 0 1-2.4-2.4L15 7.5"/></svg>',
+    zoom: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M11 8v6M8 11h6"/></svg>',
+  };
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+    del(k) { try { localStorage.removeItem(k); } catch (e) {} },
+  };
+  const KEY = { session: 'sa-session', state: u => 'sa-state:' + u, outbox: u => 'sa-outbox:' + u };
+  const fmtTime = t => new Date(t).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  const fmtDT = t => new Date(t).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+  let session = store.get(KEY.session, null);   // { token, user: { username, full, org } }
+  let state = null;                             // { code, res: { [code]: { v, note, t, img: [], day, ver } }, current: { ver }, serverCases }
+  let outbox = [];                              // ผลที่ยังไม่ได้ส่ง (ล่าสุดของแต่ละข้อ)
+  let LIST = BUILTIN.slice();                   // ข้อทดสอบที่แสดง (ข้อตั้งต้น + ข้อที่แอดมินเพิ่ม)
+  const localShots = {};                        // ภาพที่แนบในรอบนี้ (ใช้แสดงและพิมพ์)
+  let netDown = false, sending = null, retryMs = 0, retryTimer = 0, noteTimer = 0, query = '';
+
+  // ======================================================================= ติดต่อหลังบ้าน
+  async function call(action, body) {
+    if (!API) throw Object.assign(new Error('ยังไม่ได้ตั้งค่าที่อยู่ระบบหลังบ้าน (config.js)'), { code: 'CONFIG' });
+    let res, j;
+    try {
+      res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action }, body)) });
+    } catch (e) { throw Object.assign(new Error('เชื่อมต่อเครือข่ายไม่ได้'), { code: 'NET' }); }
+    try { j = await res.json(); } catch (e) { throw Object.assign(new Error('ระบบหลังบ้านตอบกลับไม่ถูกต้อง (' + res.status + ')'), { code: 'NET' }); }
+    if (!j.ok) throw Object.assign(new Error(j.error || 'เกิดข้อผิดพลาด'), { code: j.code || 'SERVER' });
+    if (j.current && state) applyCurrent(j.current);
+    return j;
+  }
+
+  // ======================================================================= ข้อทดสอบ
+  const SYS_ORDER = DATA.systems.map(s => s.n);
+  function buildList(serverCases) {
+    const builtin = {}; BUILTIN.forEach(c => { builtin[c.code] = c; });
+    const hidden = {}, extras = [];
+    (serverCases || []).forEach(s => {
+      if (builtin[s.code]) { if (!s.show) hidden[s.code] = true; return; }
+      if (!s.show || !s.code) return;
+      const info = TYPE_INFO[s.type] ? s.type : 'Positive';
+      extras.push({ sys: 'X', sysName: s.sysName || 'ข้อทดสอบเพิ่มเติม', sec: 'ข้อทดสอบเพิ่มเติม (ทีม BMS เพิ่ม)', code: s.code, task: s.task, type: info,
+                    typeNote: '', slot: s.slot, menu: s.menu, pre: '', steps: String(s.steps || '').split('\n').map(x => x.trim()).filter(Boolean),
+                    data: s.data, sample: [], items: null, jes: [], expect: s.expect, note: '', img: '', shotCap: '', extra: true });
+    });
+    const out = [];
+    const groups = SYS_ORDER.concat(extras.map(e => e.sysName).filter(n => SYS_ORDER.indexOf(n) < 0));
+    groups.filter((g, i) => groups.indexOf(g) === i).forEach(g => {
+      BUILTIN.forEach(c => { if (c.sysName === g && !hidden[c.code]) out.push(c); });
+      extras.forEach(c => { if (c.sysName === g) out.push(c); });
+    });
+    LIST = out;
+  }
+  const idxOf = code => LIST.findIndex(c => c.code === code);
+  const cur = () => LIST[Math.max(0, idxOf(state.code))] || LIST[0];
+  const res = code => state.res[code] || (state.res[code] = {});
+  const pending = code => outbox.some(o => o.code === code);
+  function counts() {
+    const n = { pass: 0, fail: 0, block: 0, todo: 0 };
+    LIST.forEach(c => { n[(state.res[c.code] || {}).v || 'todo']++; });
+    return n;
+  }
+  function defaultDay(c) {
+    const d = new Date();
+    if (d.getFullYear() === 2026 && d.getMonth() === 9 && d.getDate() >= 5 && d.getDate() <= 8) return DAYS[d.getDate() - 5];
+    const m = /^(\d+) ต\.ค\. 2569/.exec(c.slot || '');
+    return m ? m[1] + ' ต.ค. 2569' : DAYS[0];
+  }
+  function applyCurrent(cu) {
+    if (!cu || !cu.ver || state.current.ver === cu.ver) return;
+    state.current.ver = cu.ver; persist();
+    $('curVer').textContent = cu.ver;
+    const c = cur(), r = state.res[c.code] || {};
+    if (!r.ver && $('ver') && document.activeElement !== $('ver')) $('ver').value = cu.ver;
+  }
+  function persist() {
+    if (!session) return;
+    store.set(KEY.state(session.user.username), state);
+    store.set(KEY.outbox(session.user.username), outbox);
+  }
+
+  // ======================================================================= เข้าสู่ระบบ / สมัคร
+  function showAuth(view, msg) {
+    $('app').hidden = true; $('auth').hidden = false;
+    $('loginForm').hidden = view !== 'login'; $('regForm').hidden = view !== 'reg';
+    $('lerr').textContent = view === 'login' ? (msg || '') : ''; $('rerr').textContent = '';
+    $('cfgWarn').hidden = !!API;
+    setTimeout(() => { const f = view === 'login' ? $('lu') : $('rn'); if (f && !('ontouchstart' in window)) f.focus(); }, 60);
+  }
+  document.querySelectorAll('.eye').forEach(b => b.onclick = () => { const i = $(b.dataset.for); i.type = i.type === 'password' ? 'text' : 'password'; });
+  $('toReg').onclick = () => showAuth('reg');
+  $('radm').onchange = e => { $('radmBox').hidden = !e.target.checked; };
+  $('toLogin').onclick = () => showAuth('login');
+  async function busy(btn, label, fn) {
+    const old = btn.textContent; btn.disabled = true; btn.textContent = label;
+    try { await fn(); } finally { btn.disabled = false; btn.textContent = old; }
+  }
+  const errText = e => e.code === 'NET' ? 'เชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่' : e.message;
+  $('loginForm').onsubmit = e => {
+    e.preventDefault();
+    const u = $('lu').value.trim().toLowerCase(), p = $('lp').value;
+    if (!u || !p) { $('lerr').textContent = 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน'; return; }
+    busy($('loginBtn'), 'กำลังเข้าสู่ระบบ…', async () => {
+      try { const j = await call('login', { username: u, password: p }); $('lp').value = ''; start(j); }
+      catch (err) { $('lerr').textContent = errText(err); }
+    });
+  };
+  $('regForm').onsubmit = e => {
+    e.preventDefault();
+    const v = id => $(id).value.trim();
+    const full = v('rn'), org = v('ro'), u = v('ru').toLowerCase(), inv = v('ri'), p = $('rp').value, p2 = $('rp2').value;
+    const admin = $('radm').checked, adminCode = v('rac');
+    const err = m => { $('rerr').textContent = m; };
+    if (!full || !u || !p || !inv) return err('กรุณากรอกช่องที่มีเครื่องหมาย * ให้ครบ');
+    if (!/^[a-z0-9._-]{3,40}$/.test(u)) return err('ชื่อผู้ใช้ใช้ได้เฉพาะ a-z 0-9 . _ - อย่างน้อย 3 ตัว');
+    if (p.length < 6) return err('รหัสผ่านต้องมีอย่างน้อย 6 ตัว');
+    if (p !== p2) return err('รหัสผ่านทั้งสองช่องไม่ตรงกัน');
+    if (admin && !adminCode) return err('กรุณากรอกรหัสผู้ดูแล');
+    busy($('regBtn'), 'กำลังสมัคร…', async () => {
+      try {
+        const j = await call('register', { full, org, username: u, invite: inv, password: p, admin, adminCode });
+        ['rn', 'ro', 'ru', 'ri', 'rp', 'rp2', 'rac'].forEach(id => { $(id).value = ''; });
+        $('radm').checked = false; $('radmBox').hidden = true;
+        start(j, true);
+      } catch (e2) { err(errText(e2)); }
+    });
+  };
+  function start(j, fresh) {
+    session = { token: j.token, user: j.user };
+    store.set(KEY.session, session);
+    enterApp(fresh, j.current);
+  }
+  function expire(msg) {
+    session = null; store.del(KEY.session); hideDash();
+    showAuth('login', msg || 'หมดเวลาเข้าระบบ กรุณาเข้าสู่ระบบใหม่ (ผลที่ยังไม่ได้ส่งจะส่งต่อให้หลังเข้าระบบ)');
+  }
+  $('logout').onclick = () => {
+    if (outbox.length && !confirm(`ยังมีผลที่ยังไม่ได้ส่งเข้าระบบ ${outbox.length} ข้อ\nถ้าออกจากระบบตอนนี้ ผลจะยังเก็บไว้ในเครื่องนี้ และส่งให้เมื่อเข้าระบบอีกครั้ง\n\nออกจากระบบ?`)) return;
+    if (session) call('logout', { token: session.token }).catch(() => {});
+    session = null; store.del(KEY.session); closeSide(); hideDash();
+    showAuth('login');
+  };
+
+  // ======================================================================= เข้าหน้าบันทึกผล
+  async function enterApp(fresh, current) {
+    const u = session.user;
+    state = Object.assign({ code: '', res: {}, current: { ver: '' }, serverCases: null }, store.get(KEY.state(u.username), {}));
+    if (current && current.ver) state.current.ver = current.ver;
+    outbox = store.get(KEY.outbox(u.username), []);
+    buildList(state.serverCases);
+    if (idxOf(state.code) < 0) state.code = LIST[0].code;
+    $('auth').hidden = true; $('app').hidden = false;
+    $('uname').textContent = u.full; $('whoName').textContent = u.full; $('whoOrg').textContent = u.org || '';
+    $('av').textContent = (u.full.replace(/^(นาย|นางสาว|นาง|ดร\.|ผศ\.|รศ\.)\s*/, '').trim().charAt(0) || '?');
+    $('curVer').textContent = state.current.ver || '-';
+    $('dashBtn').hidden = u.role !== 'admin';
+    showWelcome(fresh, true);
+    render();
+    try {
+      const j = await call('me', { token: session.token });
+      session.user = j.user; store.set(KEY.session, session);
+      $('dashBtn').hidden = j.user.role !== 'admin';
+      state.serverCases = j.cases || null;
+      const pend = {}; outbox.forEach(o => { pend[o.code] = true; });
+      const merged = {};
+      Object.keys(j.results || {}).forEach(code => { merged[code] = j.results[code]; });
+      Object.keys(state.res).forEach(code => { if (pend[code]) merged[code] = state.res[code]; });
+      state.res = merged;
+      buildList(state.serverCases);
+      if (idxOf(state.code) < 0) state.code = LIST[0].code;
+      persist(); $('notice').hidden = true;
+      showWelcome(fresh, false); render();
+    } catch (e) {
+      if (e.code === 'AUTH') return expire(e.message);
+      notice('โหลดผลจากระบบไม่ได้ (' + errText(e) + ') กำลังแสดงผลที่เก็บในเครื่องนี้ ระบบจะลองส่งให้อัตโนมัติ');
+      showWelcome(fresh, false);
+    }
+    flush();
+  }
+  function notice(msg) { $('notice').textContent = msg; $('notice').hidden = false; }
+  function nextTodo() { const i = LIST.findIndex(c => !(state.res[c.code] || {}).v); return i < 0 ? null : LIST[i]; }
+  function showWelcome(fresh, loading) {
+    const w = $('welcome'), u = session.user, n = counts(), done = LIST.length - n.todo;
+    const last = Math.max(0, ...Object.values(state.res).map(r => r.t || 0));
+    const nx = nextTodo();
+    const go = loading ? '' : nx ? `<button class="btn primary" id="resume">ทำต่อที่ ${esc(nx.code)} ›</button>` : '<span class="muted">บันทึกผลครบทุกข้อแล้ว กดพิมพ์สรุปผลได้ที่แถบด้านซ้าย</span>';
+    const txt = loading ? `<div class="txt">กำลังโหลดผลที่บันทึกไว้…<small>${esc(u.full)}</small></div>`
+      : done === 0 ? `<div class="txt">สวัสดี · ${esc(u.full)}<small>ยังไม่มีผลที่บันทึก เริ่มที่ข้อแรกได้เลย ผลจะบันทึกเข้าระบบอัตโนมัติทุกครั้งที่เลือกผลหรือพิมพ์ข้อความ</small></div>`
+      : `<div class="txt">ยินดีต้อนรับกลับ · ${esc(u.full)}<small>บันทึกแล้ว ${done} / ${LIST.length} ข้อ${last ? ' · บันทึกล่าสุด ' + fmtDT(last) + ' น.' : ''}</small></div>`;
+    w.innerHTML = txt + go + '<button class="x" id="wx" aria-label="ปิด">×</button>';
+    w.hidden = false;
+    $('wx').onclick = () => { w.hidden = true; };
+    if ($('resume')) $('resume').onclick = () => goTo(nx.code);
+  }
+
+  // ======================================================================= แสดงผล
+  function goTo(code) { state.code = code; const g = (LIST[idxOf(code)] || {}).sysName; if (state.fold && g) state.fold[g] = false; persist(); closeSide(); render(); window.scrollTo({ top: 0 }); }
+  function renderTop() {
+    const n = counts(), done = LIST.length - n.todo;
+    $('progText').textContent = `บันทึกผลแล้ว ${done} / ${LIST.length} ข้อ`;
+    $('menuCount').textContent = `${done}/${LIST.length}`;
+    $('meter').style.width = (done / LIST.length * 100) + '%';
+    renderNet();
+  }
+  function renderNet() {
+    const el = $('net');
+    if (!outbox.length) { el.className = 'net ok'; el.innerHTML = '✓ <span class="txt">บันทึกครบแล้ว</span>'; }
+    else if (netDown) { el.className = 'net down'; el.innerHTML = `⚠ <span class="txt">ออฟไลน์ · </span>รอส่ง ${outbox.length}`; }
+    else { el.className = 'net wait'; el.innerHTML = `⏳ <span class="txt">กำลังส่ง </span>${outbox.length}`; }
+  }
+  // แถบรายการข้อ: ย่อ/ขยายตามระบบ และกรองตามวันหรือสถานะ
+  const CHEV = '<svg class="chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+  function matches(x) {
+    const q = query.trim().toLowerCase(), r = state.res[x.code] || {}, f = state.filter || {};
+    if (q && (x.code + ' ' + x.task + ' ' + x.menu).toLowerCase().indexOf(q) < 0) return false;
+    if (f.day && (x.slot || '').indexOf(f.day) !== 0) return false;
+    if (f.st === 'todo' && r.v) return false;
+    if (f.st === 'done' && !r.v) return false;
+    if (f.st === 'bad' && r.v !== 'fail' && r.v !== 'block') return false;
+    return true;
+  }
+  function renderToc() {
+    const c = cur(), f = state.filter || {}, filtering = !!(query.trim() || f.day || f.st);
+    if (!state.fold) {                            // ครั้งแรก: ขยายเฉพาะระบบของข้อที่กำลังทำ
+      state.fold = {}; LIST.forEach(x => { if (x.sysName !== c.sysName) state.fold[x.sysName] = true; });
+    }
+    const groups = LIST.map(x => x.sysName).filter((g, i, a) => a.indexOf(g) === i);
+    const html = groups.map(g => {
+      const items = LIST.filter(x => x.sysName === g), shown = items.filter(matches);
+      if (filtering && !shown.length) return '';
+      const done = items.filter(x => (state.res[x.code] || {}).v).length;
+      const open = filtering || !state.fold[g];
+      return `<button class="grp" data-g="${esc(g)}" aria-expanded="${open}">${CHEV}<span class="gn">${esc(g)}</span>`
+        + (filtering ? `<span class="gm">${shown.length} ข้อ</span>` : '') + `<span class="gc">${done}/${items.length}</span></button>`
+        + (open ? shown.map(x => {
+          const r = state.res[x.code] || {};
+          return `<button class="it" data-code="${esc(x.code)}" aria-current="${x === c}" title="${esc(x.task)}"><span class="dot ${r.v || ''} ${pending(x.code) ? 'pend' : ''}"></span><span class="c">${esc(x.code)}</span><span class="tk">${esc(x.task)}</span></button>`;
+        }).join('') : '');
+    }).join('');
+    $('toc').innerHTML = html || '<div class="muted" style="padding:10px 14px">ไม่พบข้อที่ตรงกับเงื่อนไข</div>';
+    $('toc').querySelectorAll('.it').forEach(b => b.onclick = () => goTo(b.dataset.code));
+    $('toc').querySelectorAll('.grp').forEach(b => b.onclick = () => {
+      if (filtering) return;
+      state.fold[b.dataset.g] = b.getAttribute('aria-expanded') === 'true'; persist(); renderToc();
+    });
+    $('fDay').value = f.day || ''; $('fSt').value = f.st || '';
+    const a = $('toc').querySelector('[aria-current=true]');
+    if (a && a.scrollIntoView) a.scrollIntoView({ block: 'nearest' });
+  }
+  const itemsT = it => `<div class="scroll"><table><thead><tr>${it.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>
+    ${it.rows.map(r => `<tr>${r.map((v, i) => `<td class="${i >= 2 ? 'n' : ''}">${esc(v)}</td>`).join('')}</tr>`).join('')}
+    ${it.foot.map(([k, v]) => `<tr class="foot"><td colspan="${it.head.length - 1}">${esc(k)}</td><td class="n">${esc(v)}</td></tr>`).join('')}</tbody></table></div>`;
+  const jeT = j => `<div class="scroll"><table><thead><tr><th>บัญชี</th><th class="n" style="width:18%">เดบิต (บาท)</th><th class="n" style="width:18%">เครดิต (บาท)</th></tr></thead><tbody>
+    ${j.lines.map(([a, d, c]) => `<tr><td>${c ? '<span class="cr">' + esc(a) + '</span>' : esc(a)}</td><td class="n">${d}</td><td class="n">${c}</td></tr>`).join('')}
+    <tr class="foot"><td style="text-align:right">รวม (เดบิต = เครดิต)</td><td class="n">${j.total}</td><td class="n">${j.total}</td></tr></tbody></table></div>`;
+  const sampleHead = c => c.type === 'Negative' ? 'สิ่งที่ต้องลองทำ' : 'ตัวอย่างข้อมูลที่บันทึก';
+
+  function render() {
+    renderTop(); renderToc();
+    const c = cur(), r = state.res[c.code] || {}, i = idxOf(c.code), ti = TYPE_INFO[c.type] || TYPE_INFO.Positive;
+    const row = (k, v) => `<tr><th>${k}</th><td>${v}</td></tr>`;
+    const day = r.day || defaultDay(c), ver = r.ver || state.current.ver || '';
+    $('sheet').innerHTML = `
+      <div class="sh-hd"><span>${esc(c.sysName)} · ${esc(c.sec)}</span><span>${esc(c.slot)}</span></div>
+      <h1><span class="code">${esc(c.code)}</span>${esc(c.task)}</h1>
+      ${c.img ? `<figure><img src="${esc(c.img)}" alt="${esc(c.shotCap)}" data-zoom="1" loading="lazy"><figcaption>${ICON.zoom} ${esc(c.shotCap)} · คลิกที่ภาพเพื่อขยาย</figcaption></figure>` : ''}
+      <table class="doc"><tbody>
+        ${row('ประเภทโจทย์', `<span class="tag ${c.type}">${esc(c.type)}</span>${esc(ti.what)}`)}
+        ${row('เมนู', esc(c.menu))}
+        ${c.pre ? row('เงื่อนไขก่อนเริ่ม', esc(c.pre)) : ''}
+        ${row(c.type === 'E2E' ? 'ขั้นตอนทดสอบ (ทำต่อเนื่องทั้งวงจร)' : 'ขั้นตอนทดสอบ', `<ol>${c.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>`)}
+        ${c.data && c.data !== '-' ? row('ข้อมูลทดสอบ (ตามโจทย์)', esc(c.data)) : ''}
+        ${c.sample.length ? row(sampleHead(c), c.sample.map(([k, v]) => `<b>${esc(k)}:</b> ${esc(v)}`).join('<br>')) : ''}
+        ${row('ผลที่คาดหวัง', esc(c.expect))}
+        ${c.note ? row('ข้อควรทราบ', esc(c.note)) : ''}
+      </tbody></table>
+      ${c.items ? `<div class="cap">รายการในเอกสาร (${esc(c.code)})</div>${itemsT(c.items)}` : ''}
+      ${c.jes.map(j => `<div class="cap">ตัวอย่างการบันทึกบัญชี: ${esc(j.title)}</div>${jeT(j)}`).join('')}
+      <section class="form" id="form"><div class="cap">บันทึกผลการทดสอบ ${esc(c.code)}</div>
+        <table class="rt"><tbody>
+          ${row('ผลทดสอบ', `<div class="checks" role="radiogroup" aria-label="ผลทดสอบ">${['pass', 'fail', 'block'].map(v =>
+            `<label class="ck ${v} ${r.v === v ? 'on' : ''}"><input type="radio" name="res" value="${v}" ${r.v === v ? 'checked' : ''}><span class="box">${ICON.check}</span>${LABEL[v]}</label>`).join('')}</div>
+            <div class="hint" style="margin-top:4px"><b>ผ่าน</b> = ${esc(ti.pass)} · <b>ไม่ผ่าน</b> = ${esc(ti.fail)} · <b>ติดปัญหา</b> = ${esc(BLOCK_INFO)}</div>`)}
+          ${row('ผลที่ได้จริง / ปัญหาที่พบ', `<textarea id="note" placeholder="${c.type === 'Negative' ? 'เช่น ระบบแจ้งเตือนว่ารายการนี้บันทึกไปแล้ว และไม่ให้บันทึกซ้ำ' : 'เช่น บันทึกได้ เลขที่เอกสาร ... ยอดตรงตามที่คาด'}">${esc(r.note)}</textarea>`)}
+          ${row('ภาพหน้าจอประกอบ', `<label class="att">${ICON.clip} แนบภาพ<input type="file" accept="image/*" id="file"></label>
+            <span class="hint">· ถ้าใช้คอมพิวเตอร์ กด Print Screen แล้วกด Ctrl+V ในหน้านี้ได้เลย</span><div class="atts" id="atts"></div>`)}
+          ${row('ผู้ทดสอบ', 'ลงชื่อ ' + esc(session.user.full))}
+          ${row('วันที่ทดสอบ / รุ่นโปรแกรม', `<div class="dv"><select id="day" aria-label="วันที่ทดสอบ">${DAYS.map(d => `<option ${d === day ? 'selected' : ''}>${d}</option>`).join('')}</select>
+            <input id="ver" value="${esc(ver)}" placeholder="เช่น v1.178.0" aria-label="รุ่นโปรแกรม"></div>
+            <div class="hint">บันทึกแยกทุกข้อ ค่าเริ่มต้นคือรุ่นล่าสุดที่ทีม BMS แจ้ง ถ้าหน้าจอระบบแสดงรุ่นอื่นให้แก้ตามหน้าจอ</div>`)}
+        </tbody></table>
+        <div class="saved" id="saved"></div>
+      </section>`;
+    $('pos').textContent = `ข้อ ${i + 1} / ${LIST.length}`;
+    $('prev').disabled = i <= 0; $('next').disabled = i >= LIST.length - 1;
+    renderAtts(c.code); paintStatus(c.code);
+    $('sheet').querySelectorAll('.ck').forEach(l => l.onclick = e => {
+      e.preventDefault();
+      const rr = res(c.code), v = l.querySelector('input').value;
+      rr.v = rr.v === v ? '' : v;                  // กดซ้ำเพื่อยกเลิก
+      stamp(c.code); queueSave(c.code);
+      $('sheet').querySelectorAll('.ck').forEach(x => x.classList.toggle('on', rr.v === x.querySelector('input').value));
+      renderTop(); renderToc();
+    });
+    $('note').oninput = e => {
+      res(c.code).note = e.target.value; stamp(c.code); persist();
+      setSaved('wait', '… กำลังพิมพ์ (จะบันทึกเมื่อหยุดพิมพ์)');
+      clearTimeout(noteTimer); noteTimer = setTimeout(() => queueSave(c.code), 900);
+    };
+    $('note').onblur = () => { if (noteTimer) { clearTimeout(noteTimer); noteTimer = 0; const rr = state.res[c.code]; if (rr && !pending(c.code) && rr._dirty) queueSave(c.code); } };
+    $('day').onchange = e => { res(c.code).day = e.target.value; queueSave(c.code); };
+    $('ver').onchange = e => { res(c.code).ver = e.target.value.trim(); queueSave(c.code); };
+    $('file').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) attach(c.code, f); };
+  }
+  // ข้อที่เริ่มบันทึก: เก็บวันที่และรุ่นโปรแกรม ณ ตอนที่ทดสอบ
+  function stamp(code) {
+    const rr = res(code), c = LIST[idxOf(code)];
+    if (!rr.day) rr.day = $('day') ? $('day').value : defaultDay(c);
+    if (!rr.ver) rr.ver = ($('ver') && $('ver').value.trim()) || state.current.ver || '';
+    rr._dirty = true;
+  }
+  function setSaved(cls, txt) { const el = $('saved'); if (el) { el.className = 'saved ' + cls; el.textContent = txt; } }
+  function paintStatus(code) {
+    if (cur().code !== code) return;
+    const r = state.res[code] || {};
+    if (pending(code)) setSaved('wait', netDown ? '⏳ รอส่ง · ยังเชื่อมต่อระบบไม่ได้ ผลเก็บไว้ในเครื่องแล้ว จะส่งให้อัตโนมัติ' : '⏳ กำลังบันทึกเข้าระบบ…');
+    else if (r.t) setSaved('ok', '✓ บันทึกเข้าระบบแล้ว ' + fmtTime(r.t) + ' น. · วันที่ ' + (r.day || '-') + ' · รุ่น ' + (r.ver || '-'));
+    else setSaved('', 'ผลจะบันทึกเข้าระบบอัตโนมัติเมื่อเลือกผลหรือพิมพ์ข้อความ');
+  }
+  function renderAtts(code) {
+    const el = $('atts'); if (!el) return;
+    const r = state.res[code] || {}, loc = localShots[code] || [];
+    el.innerHTML = loc.map(s => `<img src="${s.src}" alt="ภาพที่แนบ" data-zoom="1" title="${esc(s.state)}">`).join('')
+      + (r.img || []).map((u, k) => `<a href="${esc(u)}" target="_blank" rel="noopener">ภาพที่ ${k + 1} (Google Drive)</a>`).join(' · ')
+      + loc.filter(s => s.state !== 'ok').map(s => `<span class="hint">${esc(s.state)}</span>`).join('');
+  }
+
+  // ======================================================================= บันทึกผล (คิวส่ง)
+  function queueSave(code) {
+    const r = res(code); delete r._dirty;
+    outbox = outbox.filter(o => o.code !== code);
+    outbox.push({ code, v: r.v || '', note: r.note || '', day: r.day || '', ver: r.ver || '' });
+    persist(); paintStatus(code); renderNet(); renderToc();
+    flush();
+  }
+  async function flush() {
+    if (sending || !outbox.length || !session) return;
+    const item = sending = outbox[0];
+    try {
+      const j = await call('save', Object.assign({ token: session.token }, item));
+      outbox = outbox.filter(o => o !== item);
+      if (!pending(item.code)) res(item.code).t = j.t;
+      netDown = false; retryMs = 0; sending = null;
+      persist(); paintStatus(item.code); renderNet(); renderToc();
+      flush();
+    } catch (e) {
+      sending = null;
+      if (e.code === 'AUTH') { persist(); return expire(e.message); }
+      if (e.code === 'INPUT') {                   // ข้อมูลไม่ถูกต้อง ส่งซ้ำก็ไม่ผ่าน
+        outbox = outbox.filter(o => o !== item); persist();
+        toast('บันทึก ' + item.code + ' ไม่สำเร็จ: ' + e.message); paintStatus(item.code); renderNet(); flush(); return;
+      }
+      netDown = true; retryMs = Math.min(retryMs ? retryMs * 2 : 3000, 30000);
+      paintStatus(item.code); renderNet(); renderToc();
+      clearTimeout(retryTimer); retryTimer = setTimeout(flush, retryMs);
+    }
+  }
+  window.addEventListener('online', () => { retryMs = 0; flush(); });
+  window.addEventListener('beforeunload', e => {
+    if (noteTimer && state) { clearTimeout(noteTimer); const c = cur(); queueSave(c.code); }
+    if (outbox.length) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  // ======================================================================= แนบภาพ
+  function shrink(file) {
+    return new Promise((ok, bad) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => {
+        const s = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(img.naturalWidth * s); cv.height = Math.round(img.naturalHeight * s);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url); ok(cv.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); bad(new Error('เปิดไฟล์ภาพไม่ได้')); };
+      img.src = url;
+    });
+  }
+  async function attach(code, file) {
+    if (!/^image\//.test(file.type)) return toast('แนบได้เฉพาะไฟล์ภาพ');
+    let data;
+    try { data = await shrink(file); } catch (e) { return toast(e.message); }
+    const shot = { src: data, state: 'กำลังอัปโหลดภาพ…' };
+    (localShots[code] = localShots[code] || []).push(shot);
+    renderAtts(code);
+    try {
+      const j = await call('upload', { token: session.token, code, data });
+      shot.state = 'ok';
+      const r = res(code); r.img = (r.img || []).concat([j.url]); persist();
+      toast('แนบภาพ ' + code + ' แล้ว');
+    } catch (e) {
+      if (e.code === 'AUTH') return expire(e.message);
+      shot.state = 'อัปโหลดภาพไม่สำเร็จ (' + errText(e) + ') กรุณาแนบใหม่';
+    }
+    if (cur().code === code) renderAtts(code);
+  }
+  document.addEventListener('paste', e => {
+    if ($('app').hidden || !session) return;
+    const item = [...(e.clipboardData || {}).items || []].find(x => x.kind === 'file' && /^image\//.test(x.type));
+    if (!item) return;
+    e.preventDefault(); attach(cur().code, item.getAsFile());
+  });
+
+  // ======================================================================= ขยายภาพ / แถบข้อทดสอบ / อื่น ๆ
+  document.addEventListener('click', e => {
+    const img = e.target.closest && e.target.closest('img[data-zoom]');
+    if (!img) return;
+    const z = $('zoom'); z.querySelector('img').src = img.src; z.hidden = false; z.classList.remove('full');
+  });
+  $('zoom').onclick = e => {
+    // ภาพขยายพอดีจอ · คลิกที่ภาพสลับเป็นขนาดจริง (เลื่อนดูได้) · คลิกพื้นหลังหรือปุ่ม × เพื่อปิด
+    const z = $('zoom');
+    if (e.target.tagName === 'IMG') { z.classList.toggle('full'); return; }
+    z.hidden = true;
+  };
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { $('zoom').hidden = true; closeSide(); }
+    if ($('app').hidden || /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')) return;
+    if (e.key === 'ArrowRight' && !$('next').disabled) $('next').click();
+    if (e.key === 'ArrowLeft' && !$('prev').disabled) $('prev').click();
+  });
+  function openSide() { $('side').classList.add('open'); $('scrim').classList.add('open'); $('menuBtn').setAttribute('aria-expanded', 'true'); }
+  function closeSide() { $('side').classList.remove('open'); $('scrim').classList.remove('open'); $('menuBtn').setAttribute('aria-expanded', 'false'); }
+  $('menuBtn').onclick = () => ($('side').classList.contains('open') ? closeSide() : openSide());
+  $('scrim').onclick = closeSide;
+  $('q').oninput = e => { query = e.target.value; renderToc(); };
+  $('fDay').onchange = e => { state.filter = Object.assign({}, state.filter, { day: e.target.value }); persist(); renderToc(); };
+  $('fSt').onchange = e => { state.filter = Object.assign({}, state.filter, { st: e.target.value }); persist(); renderToc(); };
+  $('foldAll').onclick = () => { state.fold = {}; LIST.forEach(x => { state.fold[x.sysName] = true; }); persist(); renderToc(); };
+  $('openAll').onclick = () => { state.fold = {}; LIST.forEach(x => { state.fold[x.sysName] = false; }); persist(); renderToc(); };
+  $('prev').onclick = () => { const i = idxOf(cur().code); if (i > 0) goTo(LIST[i - 1].code); };
+  $('next').onclick = () => { const i = idxOf(cur().code); if (i < LIST.length - 1) goTo(LIST[i + 1].code); };
+  let toastTimer = 0;
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3500); }
+
+  // ======================================================================= แดชบอร์ด (ผู้ดูแล)
+  let dash = null, dashTimer = 0;
+  async function showDash() {
+    closeSide();
+    document.querySelector('.layout').hidden = true; $('dash').hidden = false; $('dashBtn').classList.add('on');
+    window.scrollTo({ top: 0 });
+    await loadDash();
+    clearInterval(dashTimer); dashTimer = setInterval(() => { if (!$('dash').hidden && !document.hidden) loadDash(); }, 60000);
+  }
+  function hideDash() {
+    clearInterval(dashTimer);
+    $('dash').hidden = true; document.querySelector('.layout').hidden = false; $('dashBtn').classList.remove('on');
+  }
+  async function loadDash() {
+    $('dTime').textContent = 'กำลังโหลด…';
+    try {
+      dash = await call('dashboard', { token: session.token });
+      $('dErr').hidden = true; renderDash();
+    } catch (e) {
+      if (e.code === 'AUTH') return expire(e.message);
+      $('dErr').textContent = 'โหลดข้อมูลไม่ได้: ' + errText(e); $('dErr').hidden = false;
+      $('dTime').textContent = dash ? 'ข้อมูลล่าสุด ' + fmtDT(dash.time) + ' น.' : '';
+    }
+  }
+  function renderDash() {
+    const d = dash, cases = d.cases.filter(c => c.show), codes = {}, names = {};
+    cases.forEach(c => { codes[c.code] = c; });
+    d.testers.forEach(t => { names[t.username] = t.full; });
+    const results = d.results.filter(r => codes[r.code]);
+    const has = {}; results.forEach(r => { if (r.v) has[r.user] = true; });
+    const people = d.testers.filter(t => t.role === 'tester' || has[t.username]);
+    const R = {}; results.forEach(r => { (R[r.user] = R[r.user] || {})[r.code] = r; });
+    const cnt = (list, v) => list.filter(r => r.v === v).length;
+    const all = results.filter(r => r.v && people.some(p => p.username === r.user));
+    const total = people.length * cases.length;
+    $('dTime').textContent = 'ข้อมูลล่าสุด ' + fmtDT(d.time) + ' น. · รีเฟรชอัตโนมัติทุก 1 นาที · รุ่นโปรแกรมปัจจุบัน ' + (d.current.ver || '-');
+    $('dSheet').href = d.sheetUrl;
+    $('dKpi').innerHTML = [['ผู้ทดสอบ', people.length + ' ท่าน', ''], ['บันทึกผลแล้ว', `${all.length} / ${total}` + (total ? ` (${Math.round(all.length / total * 100)}%)` : ''), ''],
+      ['ผ่าน', cnt(all, 'pass'), 'pass'], ['ไม่ผ่าน', cnt(all, 'fail'), 'fail'], ['ติดปัญหา', cnt(all, 'block'), 'block']]
+      .map(([k, v, c]) => `<div class="kpi ${c}"><small>${k}</small><b>${v}</b></div>`).join('');
+    const bar = (p, f, b, n) => `<div class="bar2" title="ผ่าน ${p} · ไม่ผ่าน ${f} · ติดปัญหา ${b} · จาก ${n}"><i class="p" style="width:${p / n * 100}%"></i><i class="f" style="width:${f / n * 100}%"></i><i class="b" style="width:${b / n * 100}%"></i></div>`;
+    $('dTesters').innerHTML = people.length ? `<table><thead><tr><th>ผู้ทดสอบ</th><th>ความคืบหน้า</th><th class="n">ทำแล้ว</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th>บันทึกล่าสุด</th></tr></thead><tbody>`
+      + people.map(t => {
+        const mine = Object.values(R[t.username] || {}).filter(r => r.v), last = Math.max(0, ...Object.values(R[t.username] || {}).map(r => r.t));
+        return `<tr><td><b>${esc(t.full)}</b>${t.role === 'admin' ? ' <span class="muted">(ผู้ดูแล)</span>' : ''}<br><span class="muted">${esc(t.org || t.username)}</span></td>
+          <td>${bar(cnt(mine, 'pass'), cnt(mine, 'fail'), cnt(mine, 'block'), cases.length)}</td><td class="n">${mine.length}/${cases.length}</td>
+          <td class="n">${cnt(mine, 'pass')}</td><td class="n">${cnt(mine, 'fail')}</td><td class="n">${cnt(mine, 'block')}</td><td>${last ? fmtDT(last) : '-'}</td></tr>`;
+      }).join('') + '</tbody></table>' : '<span class="muted">ยังไม่มีผู้ทดสอบสมัครสมาชิก</span>';
+    const sysNames = cases.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i);
+    $('dSys').innerHTML = `<table><thead><tr><th>ระบบ</th><th class="n">ข้อ</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th class="n">ยังไม่ทำ</th></tr></thead><tbody>`
+      + sysNames.map(g => {
+        const cs = cases.filter(c => c.sysName === g), rs = all.filter(r => codes[r.code].sysName === g);
+        return `<tr><td>${esc(g)}</td><td class="n">${cs.length}</td><td class="n">${cnt(rs, 'pass')}</td><td class="n">${cnt(rs, 'fail')}</td><td class="n">${cnt(rs, 'block')}</td><td class="n">${people.length * cs.length - rs.length}</td></tr>`;
+      }).join('') + '</tbody></table>';
+    const issues = all.filter(r => r.v === 'fail' || r.v === 'block').sort((a, b) => b.t - a.t);
+    $('dIssueN').textContent = issues.length ? `(${issues.length} รายการ)` : '';
+    $('dIssues').innerHTML = issues.length ? `<table><thead><tr><th>เวลา</th><th>ผู้ทดสอบ</th><th>ข้อ</th><th>โจทย์</th><th>ผล</th><th>ผลที่ได้จริง / ปัญหาที่พบ</th><th>วันที่ / รุ่น</th><th>ภาพ</th></tr></thead><tbody>`
+      + issues.map(r => `<tr><td>${fmtDT(r.t)}</td><td>${esc(names[r.user] || r.user)}</td><td><b>${esc(r.code)}</b></td><td>${esc(codes[r.code].task)}</td>
+          <td><span class="pill ${r.v}">${SHORT[r.v]}</span></td><td>${esc(r.note) || '<span class="muted">-</span>'}</td><td>${esc(r.day)}<br>${esc(r.ver)}</td>
+          <td>${r.img.map((u, k) => `<a href="${esc(u)}" target="_blank" rel="noopener">${k + 1}</a>`).join(' ') || '-'}</td></tr>`).join('') + '</tbody></table>'
+      : '<span class="muted">ยังไม่มีข้อที่ไม่ผ่านหรือติดปัญหา</span>';
+    const sel = $('dSysF'), keep = sel.value;
+    sel.innerHTML = '<option value="">ทุกระบบ</option>' + sysNames.map(g => `<option ${g === keep ? 'selected' : ''}>${esc(g)}</option>`).join('');
+    const mcases = cases.filter(c => !sel.value || c.sysName === sel.value);
+    const sym = { pass: '✓', fail: '✗', block: '!' };
+    $('dMatrix').innerHTML = people.length ? `<table class="mx"><thead><tr><th class="l">ข้อทดสอบ</th>${people.map(t => `<th class="u">${esc(t.full)}</th>`).join('')}</tr></thead><tbody>`
+      + mcases.map(c => `<tr><td class="l"><b>${esc(c.code)}</b> ${esc(c.task)}</td>` + people.map(t => {
+        const r = (R[t.username] || {})[c.code] || {};
+        const tip = r.v ? `${SHORT[r.v]} · ${r.day || ''} · ${r.ver || ''}${r.note ? '\n' + r.note : ''}` : 'ยังไม่ทำ';
+        return `<td title="${esc(tip)}"><b class="m ${r.v || ''}">${sym[r.v] || '·'}</b></td>`;
+      }).join('') + '</tr>').join('') + '</tbody></table>' : '';
+    $('dLog').innerHTML = d.log.length ? `<table><thead><tr><th>เวลา</th><th>ผู้ใช้</th><th>รายการ</th><th>ข้อ</th><th>ผล</th><th>ข้อความ</th></tr></thead><tbody>`
+      + d.log.map(l => `<tr><td>${fmtDT(l.t)}</td><td>${esc(l.full || l.user)}</td><td>${esc(l.what)}</td><td>${esc(l.code)}</td><td>${l.from || l.to ? esc(l.from || '-') + ' → ' + esc(l.to || '-') : ''}</td><td>${esc(l.note)}</td></tr>`).join('') + '</tbody></table>'
+      : '<span class="muted">ยังไม่มีกิจกรรม</span>';
+  }
+  $('dashBtn').onclick = () => ($('dash').hidden ? showDash() : hideDash());
+  $('dBack').onclick = hideDash;
+  $('dRefresh').onclick = loadDash;
+  $('dSysF').onchange = () => { if (dash) renderDash(); };
+
+  // ======================================================================= ฉบับพิมพ์
+  function buildPrint(mode) {
+    const u = session.user;
+    const hd = s => `<div class="p-hd"><span>เอกสารประกอบการทดสอบระบบ BMS Smart Accounting · ${esc(s)}</span><span>ผู้ทดสอบ: ${esc(u.full)}</span></div>`;
+    const mark = (r, v) => `<span class="mark">${r.v === v ? '☑' : '☐'} ${LABEL[v]}</span>`;
+    const row = (k, html) => `<tr><th class="l">${k}</th><td>${html}</td></tr>`;
+    const blk = (cap, inner) => `<div class="blk"><div class="cap">${cap}</div>${inner}</div>`;
+    const pages = mode !== 'full' ? [] : LIST.map((c, k) => {
+      const r = state.res[c.code] || {}, ti = TYPE_INFO[c.type] || TYPE_INFO.Positive;
+      return `<div class="p-page p">${hd(c.sysName)}
+        <div class="p-title">${esc(c.code)} &nbsp;${esc(c.task)}</div>
+        ${c.img ? `<figure><img src="${esc(c.img)}" alt=""><figcaption>ภาพที่ ${k + 1} ${esc(c.shotCap)}</figcaption></figure>` : ''}
+        <table>
+          ${row('ประเภทโจทย์', `<span class="tag ${c.type}">${esc(c.type)}</span> ${esc(ti.what)}`)}
+          ${row('ช่วงเวลา', esc(c.slot))}${row('เมนู', esc(c.menu))}
+          ${c.pre ? row('เงื่อนไขก่อนเริ่ม', esc(c.pre)) : ''}
+          ${row('ขั้นตอนทดสอบ', `<ol>${c.steps.map(s => `<li>${esc(s)}</li>`).join('')}</ol>`)}
+          ${c.data && c.data !== '-' ? row('ข้อมูลทดสอบ (ตามโจทย์)', esc(c.data)) : ''}
+          ${c.sample.length ? row(sampleHead(c), c.sample.map(([kk, v]) => `<b>${esc(kk)}:</b> ${esc(v)}`).join('<br>')) : ''}
+          ${row('ผลที่คาดหวัง', esc(c.expect))}${c.note ? row('ข้อควรทราบ', esc(c.note)) : ''}
+        </table>
+        ${c.items ? blk(`รายการในเอกสาร (${esc(c.code)})`, itemsT(c.items).replace(/<\/?div[^>]*>/g, '')) : ''}
+        ${c.jes.map(j => blk(`ตัวอย่างการบันทึกบัญชี ${esc(c.code)}: ${esc(j.title)}`, jeT(j).replace(/<\/?div[^>]*>/g, ''))).join('')}
+        <div class="box"><div class="cap">บันทึกผลการทดสอบ ${esc(c.code)}</div><table>
+          ${row('ผลทดสอบ', mark(r, 'pass') + mark(r, 'fail') + mark(r, 'block'))}
+          <tr><th class="l">ผลที่ได้จริง / ปัญหาที่พบ</th><td style="height:16mm">${esc(r.note).replace(/\n/g, '<br>')}</td></tr>
+          ${(r.img || []).length ? row('ภาพหน้าจอประกอบ', `${r.img.length} ภาพ (เก็บใน Google Drive ของทีม BMS)`) : ''}
+          ${row('ผู้ทดสอบ', 'ลงชื่อ ' + esc(u.full))}
+          ${row('วันที่ / รุ่นโปรแกรม', r.v || r.note ? `วันที่ ${esc(r.day || '-')} &emsp;&emsp; รุ่นโปรแกรม ${esc(r.ver || '-')}` : '<span class="dots">&nbsp;</span>')}
+        </table></div>
+        ${(localShots[c.code] || []).map(s => `<figure><img src="${s.src}" alt=""><figcaption>ภาพหน้าจอที่ผู้ทดสอบแนบ</figcaption></figure>`).join('')}
+      </div>`;
+    });
+    const n = counts();
+    const bySys = LIST.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i).map(g => {
+      const items = LIST.filter(c => c.sysName === g), k = v => items.filter(c => ((state.res[c.code] || {}).v || 'todo') === v).length;
+      return `<tr><td>${esc(g)}</td><td class="n">${items.length}</td><td class="n">${k('pass')}</td><td class="n">${k('fail')}</td><td class="n">${k('block')}</td><td class="n">${k('todo')}</td></tr>`;
+    }).join('');
+    const summary = `<div class="p-page p">${hd('สรุปผล')}
+      <div class="p-title">สรุปผลการทดสอบระบบ BMS Smart Accounting</div>
+      <table><tr><th class="l">ผู้ทดสอบ</th><td>${esc(u.full)}${u.org ? ' · ' + esc(u.org) : ''}</td></tr>
+        <tr><th class="l">พิมพ์เมื่อ</th><td>${esc(new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' }))} น.</td></tr></table>
+      <table><thead><tr><th>ระบบ</th><th class="n">จำนวนข้อ</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th class="n">ยังไม่ทดสอบ</th></tr></thead>
+        ${bySys}<tr class="foot"><td>รวม</td><td class="n">${LIST.length}</td><td class="n">${n.pass}</td><td class="n">${n.fail}</td><td class="n">${n.block}</td><td class="n">${n.todo}</td></tr></table>
+      <table class="sum"><thead><tr><th style="width:5%">#</th><th style="width:10%">ข้อ</th><th>โจทย์</th><th style="width:9%">ประเภท</th><th style="width:10%">ผล</th><th style="width:16%">วันที่ / รุ่น</th><th style="width:28%">ผลที่ได้จริง / ปัญหาที่พบ</th></tr></thead>
+        ${LIST.map((c, k) => { const r = state.res[c.code] || {}; return `<tr><td>${k + 1}</td><td>${esc(c.code)}</td><td>${esc(c.task)}</td><td>${esc(c.type)}</td><td>${r.v ? SHORT[r.v] : '-'}</td><td>${r.v ? esc((r.day || '') + ' · ' + (r.ver || '')) : ''}</td><td>${esc(r.note)}</td></tr>`; }).join('')}
+      </table>
+      <div class="sign">
+        <div>ลงชื่อ <span class="dots">&nbsp;</span><br>(${esc(u.full)})<br>ผู้ทดสอบ<br>วันที่ <span class="dots" style="min-width:35%">&nbsp;</span></div>
+        <div>ลงชื่อ <span class="dots">&nbsp;</span><br>(<span class="dots">&nbsp;</span>)<br>ผู้รับรองผลการทดสอบ<br>วันที่ <span class="dots" style="min-width:35%">&nbsp;</span></div>
+      </div></div>`;
+    $('print-area').innerHTML = pages.join('') + summary;
+  }
+  async function doPrint(mode) {
+    buildPrint(mode);
+    const imgs = [...$('print-area').querySelectorAll('img')];
+    if (imgs.length) {
+      toast('กำลังเตรียมเอกสาร…');
+      await Promise.all(imgs.map(i => (i.complete ? Promise.resolve() : new Promise(r => { i.onload = i.onerror = r; }))));
+    }
+    window.print();
+  }
+  $('printSum').onclick = () => doPrint('summary');
+  $('printAll').onclick = () => doPrint('full');
+  window.addEventListener('beforeprint', () => { if (session && !$('print-area').innerHTML) buildPrint('summary'); });
+  window.addEventListener('afterprint', () => { $('print-area').innerHTML = ''; });
+
+  // ======================================================================= สีธีม
+  const THEMES = [['', 'ไม่มีสี (โทนเทา)', '#4b5563'], ['teal', 'เขียวน้ำทะเล', '#0f766e'], ['navy', 'น้ำเงิน', '#1f4e8c'],
+                  ['green', 'เขียว', '#2e7d4f'], ['plum', 'ม่วง', '#6b4f8a'], ['bronze', 'น้ำตาลทอง', '#8a6a3d']];
+  function setTheme(t) {
+    if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+    store.set('sa-theme', t || '');
+    const th = THEMES.find(x => x[0] === (t || '')) || THEMES[0];
+    $('themeColor').setAttribute('content', th[2]);
+    paintThemes();
+  }
+  function paintThemes() {
+    const curT = document.documentElement.dataset.theme || '';
+    $('themeList').innerHTML = THEMES.map(([k, n, c]) => `<button class="sw" data-t="${k}" aria-pressed="${k === curT}"><i style="background:${c}"></i>${n}</button>`).join('');
+    $('authTheme').innerHTML = 'สีธีม: ' + THEMES.map(([k, n, c]) => `<button class="dot2" data-t="${k}" title="${n}" aria-label="สีธีม ${n}" aria-pressed="${k === curT}" style="background:${c}"></button>`).join('');
+    document.querySelectorAll('#themeList .sw, #authTheme .dot2').forEach(b => b.onclick = e => { e.stopPropagation(); setTheme(b.dataset.t); });
+  }
+  $('themeBtn').onclick = e => { e.stopPropagation(); const pop = $('themePop'); pop.hidden = !pop.hidden; $('themeBtn').setAttribute('aria-expanded', String(!pop.hidden)); };
+  document.addEventListener('click', e => { if (!$('themePop').hidden && !e.target.closest('.theme')) { $('themePop').hidden = true; $('themeBtn').setAttribute('aria-expanded', 'false'); } });
+  setTheme(store.get('sa-theme', ''));
+
+  // ======================================================================= เริ่มต้น
+  if (session && session.token && session.user) enterApp(false); else showAuth('login');
+  window.SA_DEBUG = { get state() { return state; }, get outbox() { return outbox; }, get list() { return LIST; } };
+})();
