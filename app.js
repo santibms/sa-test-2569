@@ -323,7 +323,7 @@
         + (filtering ? `<span class="gm">${shown.length} ข้อ</span>` : '') + `<span class="gc">${done}/${items.length}</span></button>`
         + (open ? shown.map(x => {
           const r = state.res[x.code] || {};
-          return `<button class="it" data-code="${esc(x.code)}" aria-current="${x === c}" title="${esc(x.task)}"><span class="dot ${r.v || ''} ${pending(x.code) ? 'pend' : ''}"></span><span class="c">${esc(x.code)}</span><span class="tk">${esc(x.task)}</span></button>`;
+          return `<button class="it" data-code="${esc(x.code)}" aria-current="${x === c}" title="${esc(x.task)}"><span class="dot ${r.v || ''} ${pending(x.code) ? 'pend' : ''}"></span><span class="c">${esc(x.code)}</span><span class="tk">${esc(x.task)}${r.v ? `<small class="rs ${r.v}">${SHORT[r.v]}${r.day ? ' · ' + esc(r.day) : ''}${r.ver ? ' · ' + esc(r.ver) : ''}</small>` : ''}</span></button>`;
         }).join('') : '');
     }).join('');
     $('toc').innerHTML = html || '<div class="muted" style="padding:10px 14px">ไม่พบข้อที่ตรงกับเงื่อนไข</div>';
