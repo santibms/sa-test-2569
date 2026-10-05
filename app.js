@@ -47,21 +47,57 @@
   let netDown = false, sending = null, retryMs = 0, retryTimer = 0, noteTimer = 0, query = '';
 
   // ======================================================================= ติดต่อหลังบ้าน
-  const RETRY = { me: 3, dashboard: 3, login: 2 };
-  async function call(action, body, attempt = 0) {
+  // Google Apps Script บางครั้งค้าง 20–40 วินาทีแล้วตอบเป็นหน้า 404 (เกิดที่ฝั่ง Google ก่อนถึงโค้ดของเรา)
+  // คำขอที่ส่งซ้ำได้อย่างปลอดภัย: ถ้ายังไม่ตอบภายในเวลาที่กำหนด ส่งคำขอสำรองคู่ขนาน แล้วใช้คำตอบที่มาถึงก่อน
+  // (สมัครสมาชิก และแนบภาพ ไม่ส่งซ้ำ เพราะจะได้บัญชีหรือไฟล์ภาพซ้ำ)
+  const HEDGE = { login: 1, me: 1, save: 1, dashboard: 1, logout: 1, setCurrent: 1, setOpenDays: 1, diag: 1 };
+  const HEDGE_AT = [0, 7000, 16000];            // เวลาที่เริ่มคำขอที่ 1, 2, 3 (มิลลิวินาที)
+  const MAX_TRY = 4;                            // รวมการส่งใหม่ทันทีเมื่อคำขอก่อนหน้าล้มเหลว
+  const TIMEOUT = { upload: 120000, register: 60000 };
+  function attempt(action, body, ctl) {
+    const tm = setTimeout(() => ctl.abort(), TIMEOUT[action] || 45000);
+    const rid = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);   // ระบบหลังบ้านส่งรหัสนี้กลับมา
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action, rid }, body)), signal: ctl.signal })
+      .then(res => res.json())
+      .then(j => {
+        if (!j || typeof j.ok !== 'boolean') throw new Error('bad response');
+        if (j.rid !== rid) throw new Error('response of another request');   // คำตอบไม่ใช่ของคำขอนี้: ไม่ใช้ แล้วส่งใหม่
+        return j;
+      })
+      .finally(() => clearTimeout(tm));
+  }
+  function send(action, body) {
+    if (!HEDGE[action]) return attempt(action, body, new AbortController());
+    return new Promise((resolve, reject) => {
+      let started = 0, failed = 0, done = false, lastJson = null;
+      const ctls = [], timers = [];
+      const finish = (fn, v) => { if (done) return; done = true; timers.forEach(clearTimeout); ctls.forEach(c => c.abort()); fn(v); };
+      const launch = () => {
+        if (done || started >= MAX_TRY || started - failed >= HEDGE_AT.length) return;
+        started++;
+        const ctl = new AbortController(); ctls.push(ctl);
+        attempt(action, body, ctl).then(j => {
+          // ระบบขัดข้องชั่วคราว (เช่น Google Sheet ตอบช้า) ถือเป็นความล้มเหลวที่ลองใหม่ได้
+          if (!j.ok && j.code === 'SERVER') throw Object.assign(new Error('server'), { json: j });
+          finish(resolve, j);
+        }).catch(e => {
+          if (e && e.json) lastJson = e.json;
+          failed++;
+          if (done) return;
+          if (failed < started) return;                                   // ยังมีคำขออื่นค้างอยู่ รอคำตอบ
+          // ไม่มีคำขอค้างอยู่: ส่งใหม่เกือบทันที (การบันทึกผลมีคิวส่งใหม่ของตัวเอง จึงแจ้ง "รอส่ง" ทันที)
+          if (failed >= MAX_TRY || action === 'save') return lastJson ? finish(resolve, lastJson) : finish(reject, e);
+          timers.push(setTimeout(launch, 1200));
+        });
+      };
+      HEDGE_AT.forEach(t => timers.push(setTimeout(launch, t)));
+    });
+  }
+  async function call(action, body) {
     if (!API) throw Object.assign(new Error('ยังไม่ได้ตั้งค่าที่อยู่ระบบหลังบ้าน (config.js)'), { code: 'CONFIG' });
-    let res, j;
-    try {
-      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 60000);
-      try {
-        res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action }, body)), signal: ctl.signal });
-        j = await res.json();
-      } finally { clearTimeout(tm); }
-    } catch (e) {
-      // ระบบหลังบ้านมีคนใช้พร้อมกันมาก: รอแล้วลองใหม่ (เฉพาะคำขอที่ทำซ้ำได้)
-      if (attempt < (RETRY[action] || 0)) { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); return call(action, body, attempt + 1); }
-      throw Object.assign(new Error('ระบบตอบช้าหรือเชื่อมต่อไม่ได้'), { code: 'NET' });
-    }
+    let j;
+    try { j = await send(action, body); }
+    catch (e) { throw Object.assign(new Error('ระบบตอบช้าหรือเชื่อมต่อไม่ได้'), { code: 'NET' }); }
     if (!j.ok) throw Object.assign(new Error(j.error || 'เกิดข้อผิดพลาด'), { code: j.code || 'SERVER' });
     if (j.current && state) applyCurrent(j.current);
     return j;
@@ -142,8 +178,9 @@
     const slow = setTimeout(() => { btn.textContent = 'ระบบตอบช้า กำลังรอผล…'; }, 8000);
     try { await fn(); } finally { clearTimeout(slow); btn.disabled = false; btn.textContent = old; }
   }
-  // ปลุกระบบหลังบ้านตั้งแต่เปิดหน้า ให้กดเข้าสู่ระบบแล้วตอบเร็วขึ้น
-  if (API) fetch(API, { method: 'GET' }).catch(() => {});
+  // ปลุกระบบหลังบ้านตั้งแต่เปิดหน้าเข้าสู่ระบบ ให้กดเข้าสู่ระบบแล้วตอบเร็วขึ้น
+  // (ถ้าเข้าระบบค้างไว้แล้ว หน้าเว็บโหลดผลทันทีอยู่แล้ว ไม่ต้องส่งคำขอเพิ่ม)
+  if (API && !(session && session.token)) fetch(API, { method: 'GET' }).catch(() => {});
   const errText = e => e.code === 'NET' ? 'ระบบตอบช้าหรือเชื่อมต่อไม่ได้ กรุณาลองใหม่อีกครั้ง' : e.message;
   $('loginForm').onsubmit = e => {
     e.preventDefault();
@@ -395,7 +432,7 @@
   function queueSave(code) {
     const r = res(code); delete r._dirty;
     outbox = outbox.filter(o => o.code !== code);
-    outbox.push({ code, v: r.v || '', note: r.note || '', day: r.day || '', ver: r.ver || '' });
+    outbox.push({ code, v: r.v || '', note: r.note || '', day: r.day || '', ver: r.ver || '', seq: Date.now() });
     persist(); paintStatus(code); renderNet(); renderToc();
     flush();
   }
@@ -581,7 +618,13 @@
         const r = (R[t.username] || {})[c.code] || {};
         const tip = r.v ? `${SHORT[r.v]} · ${r.day || ''} · ${r.ver || ''}${r.note ? '\n' + r.note : ''}` : 'ยังไม่ทำ';
         return `<td title="${esc(tip)}"><b class="m ${r.v || ''}">${sym[r.v] || '·'}</b></td>`;
-      }).join('') + '</tr>').join('') + '</tbody></table>' : '';
+      }).join('') + '</tr>').join('') + '</tbody>'
+      // แถวสรุปของแต่ละผู้ทดสอบ นับเฉพาะข้อที่แสดงในตาราง (ตามระบบที่เลือก)
+      + `<tfoot><tr><td class="l" colspan="2">สรุป</td>` + people.map(t => {
+        const mine = mcases.map(c => ((R[t.username] || {})[c.code] || {}).v).filter(Boolean), k = v => mine.filter(x => x === v).length;
+        return `<td><span class="ms done">ทำแล้ว ${mine.length}/${mcases.length}</span><span class="ms pass">ผ่าน ${k('pass')}</span>`
+          + `<span class="ms fail">ไม่ผ่าน ${k('fail')}</span><span class="ms block">ติดปัญหา ${k('block')}</span><span class="ms todo">ยังไม่ทำ ${mcases.length - mine.length}</span></td>`;
+      }).join('') + '</tr></tfoot></table>' : '';
     $('dLog').innerHTML = d.log.length ? `<table><thead><tr><th class="n">ลำดับ</th><th>เวลา</th><th>ผู้ใช้</th><th>รายการ</th><th>ข้อ</th><th>ผล</th><th>ข้อความ</th></tr></thead><tbody>`
       + d.log.map((l, li) => `<tr><td class="n">${li + 1}</td><td>${fmtDT(l.t)}</td><td>${esc(l.full || l.user)}</td><td>${esc(l.what)}</td><td>${esc(l.code)}</td><td>${l.from || l.to ? esc(l.from || '-') + ' → ' + esc(l.to || '-') : ''}</td><td>${esc(l.note)}</td></tr>`).join('') + '</tbody></table>'
       : '<span class="muted">ยังไม่มีกิจกรรม</span>';

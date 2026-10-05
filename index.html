@@ -176,7 +176,7 @@
 
   .adm { display: flex; align-items: center; gap: 8px; font-size: 14.5px; margin: 2px 0 10px; cursor: pointer; }
   .adm input { width: 18px; height: 18px; accent-color: var(--brand); }
-  body.snap-dash .dash-act, body.snap-dash #dErr { display: none !important; }
+  body.snap-dash .dash-act, body.snap-dash #dErr, body.snap-dash #dLogCard { display: none !important; }
   .dash-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; }
   .sys-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; text-decoration: none; }
   .closed { font-size: 13px; color: var(--muted); background: var(--label); padding: 6px 14px; border-top: 1px solid var(--line); }
@@ -205,9 +205,14 @@
   .mtools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; font-size: 13.5px; color: var(--muted); }
   .mtools select { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: #fff; }
   .m { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: #eef2f1; color: #9aa5a3; font-weight: 700; font-style: normal; }
-  .m.pass { background: #e6f4ea; color: var(--pass); } .m.fail { background: #fdecea; color: var(--fail); } .m.block { background: #fff1d6; color: #b8730a; }
+  .m.pass, .ms.pass { background: #e6f4ea; color: var(--pass); } .m.fail, .ms.fail { background: #fdecea; color: var(--fail); } .m.block, .ms.block { background: #fff1d6; color: #b8730a; }
   .mx td, .mx th { text-align: center; white-space: nowrap; } .mx td.l, .mx th.l { text-align: left; white-space: normal; min-width: 220px; }
   .mx th.u { font-size: 13px; max-width: 120px; white-space: normal; }
+  /* แถวสรุปท้ายตาราง ผลรายข้อ × ผู้ทดสอบ (นับตามระบบที่เลือก) */
+  .mx tfoot td { background: var(--label); vertical-align: top; border-top: 2px solid var(--line); }
+  .mx tfoot td.l { font-weight: 700; color: var(--brand-d); vertical-align: middle; }
+  .ms { display: block; width: fit-content; font-size: 12px; line-height: 1.3; padding: 1px 6px; margin: 2px auto; border-radius: 4px; white-space: nowrap; }
+  .ms.done { font-weight: 700; color: var(--ink); } .ms.todo { color: var(--muted); }
   .pill { font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 99px; white-space: nowrap; }
   .pill.fail { background: #fdecea; color: var(--fail); } .pill.block { background: #fff1d6; color: #9a5b00; } .pill.pass { background: #e6f4ea; color: var(--pass); }
   @media (max-width: 1000px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .dgrid { grid-template-columns: 1fr; } }
@@ -267,7 +272,8 @@
   @page dashp { size: A4 landscape; margin: 8mm; }
   @media print {
     body.print-dash #app { display: block !important; }
-    body.print-dash .bar, body.print-dash .layout, body.print-dash .zoom, body.print-dash .dash-act, body.print-dash #dErr, body.print-dash #print-area, body.print-dash .toast { display: none !important; }
+    body.print-dash .bar, body.print-dash .layout, body.print-dash .zoom, body.print-dash .dash-act, body.print-dash #dErr, body.print-dash #dLogCard, body.print-dash #print-area, body.print-dash .toast { display: none !important; }
+    body.print-dash .mx tfoot { display: table-row-group; }   /* แถวสรุปพิมพ์ครั้งเดียวท้ายตาราง ไม่ซ้ำทุกหน้า */
     body.print-dash #dash { display: grid !important; max-width: none; padding: 0; gap: 8px; }
     body.print-dash .card, body.print-dash .kpi { break-inside: avoid; box-shadow: none; }
     body.print-dash .scroll { overflow: visible; }
@@ -426,7 +432,7 @@
     <div class="card"><h3>ผลรายข้อ × ผู้ทดสอบ</h3>
       <div class="mtools"><select id="dSysF" aria-label="เลือกระบบ"></select><span class="mleg"><b class="m pass">✓</b> ผ่าน <b class="m fail">✗</b> ไม่ผ่าน <b class="m block">!</b> ติดปัญหา <b class="m">·</b> ยังไม่ทำ · ชี้ที่ช่องเพื่อดูผลที่ได้จริง</span></div>
       <div class="scroll" id="dMatrix"></div></div>
-    <div class="card"><h3>กิจกรรมล่าสุด</h3><div class="scroll" id="dLog"></div></div>
+    <div class="card" id="dLogCard"><h3>กิจกรรมล่าสุด</h3><div class="scroll" id="dLog"></div></div>
   </section>
   <div class="zoom" id="zoom" hidden role="dialog" aria-label="ภาพขยาย"><img alt=""><button class="zx" aria-label="ปิด">×</button><div class="zhint">คลิกที่ภาพเพื่อดูขนาดจริง · คลิกพื้นหลัง หรือกด Esc เพื่อปิด</div></div>
 </div>
@@ -435,6 +441,6 @@
 
 <script src="config.js"></script>
 <script src="cases.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=20261005-2"></script>
 </body>
 </html>
