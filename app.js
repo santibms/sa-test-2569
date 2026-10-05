@@ -139,8 +139,11 @@
   $('toLogin').onclick = () => showAuth('login');
   async function busy(btn, label, fn) {
     const old = btn.textContent; btn.disabled = true; btn.textContent = label;
-    try { await fn(); } finally { btn.disabled = false; btn.textContent = old; }
+    const slow = setTimeout(() => { btn.textContent = 'ระบบตอบช้า กำลังรอผล…'; }, 8000);
+    try { await fn(); } finally { clearTimeout(slow); btn.disabled = false; btn.textContent = old; }
   }
+  // ปลุกระบบหลังบ้านตั้งแต่เปิดหน้า ให้กดเข้าสู่ระบบแล้วตอบเร็วขึ้น
+  if (API) fetch(API, { method: 'GET' }).catch(() => {});
   const errText = e => e.code === 'NET' ? 'ระบบตอบช้าหรือเชื่อมต่อไม่ได้ กรุณาลองใหม่อีกครั้ง' : e.message;
   $('loginForm').onsubmit = e => {
     e.preventDefault();
