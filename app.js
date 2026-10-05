@@ -512,8 +512,14 @@
     clearInterval(dashTimer);
     $('dash').hidden = true; document.querySelector('.layout').hidden = false; $('dashBtn').classList.remove('on');
   }
+  let dashLoading = false;
   async function loadDash() {
-    $('dTime').textContent = 'กำลังโหลด…';
+    if (dashLoading) return;            // กำลังโหลดอยู่: ไม่ส่งคำขอซ้อน (กันระบบหลังบ้านรับคำขอเกิน)
+    dashLoading = true;
+    try { await loadDashOnce(); } finally { dashLoading = false; }
+  }
+  async function loadDashOnce() {
+    $('dTime').textContent = dash ? 'กำลังโหลดข้อมูลล่าสุด…' : 'กำลังโหลด…';
     try {
       dash = await call('dashboard', { token: session.token });
       $('dErr').hidden = true; renderDash();
