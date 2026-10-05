@@ -47,13 +47,21 @@
   let netDown = false, sending = null, retryMs = 0, retryTimer = 0, noteTimer = 0, query = '';
 
   // ======================================================================= ติดต่อหลังบ้าน
-  async function call(action, body) {
+  const RETRY = { me: 3, dashboard: 3, login: 2 };
+  async function call(action, body, attempt = 0) {
     if (!API) throw Object.assign(new Error('ยังไม่ได้ตั้งค่าที่อยู่ระบบหลังบ้าน (config.js)'), { code: 'CONFIG' });
     let res, j;
     try {
-      res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action }, body)) });
-    } catch (e) { throw Object.assign(new Error('เชื่อมต่อเครือข่ายไม่ได้'), { code: 'NET' }); }
-    try { j = await res.json(); } catch (e) { throw Object.assign(new Error('ระบบหลังบ้านตอบกลับไม่ถูกต้อง (' + res.status + ')'), { code: 'NET' }); }
+      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 60000);
+      try {
+        res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action }, body)), signal: ctl.signal });
+        j = await res.json();
+      } finally { clearTimeout(tm); }
+    } catch (e) {
+      // ระบบหลังบ้านมีคนใช้พร้อมกันมาก: รอแล้วลองใหม่ (เฉพาะคำขอที่ทำซ้ำได้)
+      if (attempt < (RETRY[action] || 0)) { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); return call(action, body, attempt + 1); }
+      throw Object.assign(new Error('ระบบตอบช้าหรือเชื่อมต่อไม่ได้'), { code: 'NET' });
+    }
     if (!j.ok) throw Object.assign(new Error(j.error || 'เกิดข้อผิดพลาด'), { code: j.code || 'SERVER' });
     if (j.current && state) applyCurrent(j.current);
     return j;
@@ -133,7 +141,7 @@
     const old = btn.textContent; btn.disabled = true; btn.textContent = label;
     try { await fn(); } finally { btn.disabled = false; btn.textContent = old; }
   }
-  const errText = e => e.code === 'NET' ? 'เชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่' : e.message;
+  const errText = e => e.code === 'NET' ? 'ระบบตอบช้าหรือเชื่อมต่อไม่ได้ กรุณาลองใหม่อีกครั้ง' : e.message;
   $('loginForm').onsubmit = e => {
     e.preventDefault();
     const u = $('lu').value.trim().toLowerCase(), p = $('lp').value;
@@ -166,7 +174,7 @@
   function start(j, fresh) {
     session = { token: j.token, user: j.user };
     store.set(KEY.session, session);
-    enterApp(fresh, j.current);
+    enterApp(fresh, j.current, j.results ? j : null);
   }
   function expire(msg) {
     session = null; store.del(KEY.session); hideDash();
@@ -180,7 +188,7 @@
   };
 
   // ======================================================================= เข้าหน้าบันทึกผล
-  async function enterApp(fresh, current) {
+  async function enterApp(fresh, current, pre) {
     const u = session.user;
     state = Object.assign({ code: '', res: {}, current: { ver: '' }, serverCases: null }, store.get(KEY.state(u.username), {}));
     if (current && current.ver) state.current.ver = current.ver;
@@ -195,7 +203,7 @@
     showWelcome(fresh, true);
     render();
     try {
-      const j = await call('me', { token: session.token });
+      const j = pre || await call('me', { token: session.token });
       session.user = j.user; store.set(KEY.session, session);
       $('dashBtn').hidden = j.user.role !== 'admin';
       state.serverCases = j.cases || null;
@@ -350,7 +358,7 @@
     $('note').oninput = e => {
       res(c.code).note = e.target.value; stamp(c.code); persist();
       setSaved('wait', '… กำลังพิมพ์ (จะบันทึกเมื่อหยุดพิมพ์)');
-      clearTimeout(noteTimer); noteTimer = setTimeout(() => queueSave(c.code), 900);
+      clearTimeout(noteTimer); noteTimer = setTimeout(() => { noteTimer = 0; queueSave(c.code); }, 3000);
     };
     $('note').onblur = () => { if (noteTimer) { clearTimeout(noteTimer); noteTimer = 0; const rr = state.res[c.code]; if (rr && !pending(c.code) && rr._dirty) queueSave(c.code); } };
     $('day').onchange = e => { res(c.code).day = e.target.value; queueSave(c.code); };
@@ -535,10 +543,10 @@
       ['ผ่าน', cnt(all, 'pass'), 'pass'], ['ไม่ผ่าน', cnt(all, 'fail'), 'fail'], ['ติดปัญหา', cnt(all, 'block'), 'block']]
       .map(([k, v, c]) => `<div class="kpi ${c}"><small>${k}</small><b>${v}</b></div>`).join('');
     const bar = (p, f, b, n) => `<div class="bar2" title="ผ่าน ${p} · ไม่ผ่าน ${f} · ติดปัญหา ${b} · จาก ${n}"><i class="p" style="width:${p / n * 100}%"></i><i class="f" style="width:${f / n * 100}%"></i><i class="b" style="width:${b / n * 100}%"></i></div>`;
-    $('dTesters').innerHTML = people.length ? `<table><thead><tr><th>ผู้ทดสอบ</th><th>ความคืบหน้า</th><th class="n">ทำแล้ว</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th>บันทึกล่าสุด</th></tr></thead><tbody>`
-      + people.map(t => {
+    $('dTesters').innerHTML = people.length ? `<table><thead><tr><th class="n">ลำดับ</th><th>ผู้ทดสอบ</th><th>ความคืบหน้า</th><th class="n">ทำแล้ว</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th>บันทึกล่าสุด</th></tr></thead><tbody>`
+      + people.map((t, ti) => {
         const mine = Object.values(R[t.username] || {}).filter(r => r.v), last = Math.max(0, ...Object.values(R[t.username] || {}).map(r => r.t));
-        return `<tr><td><b>${esc(t.full)}</b>${t.role === 'admin' ? ' <span class="muted">(ผู้ดูแล)</span>' : ''}<br><span class="muted">${esc(t.org || t.username)}</span></td>
+        return `<tr><td class="n">${ti + 1}</td><td><b>${esc(t.full)}</b>${t.role === 'admin' ? ' <span class="muted">(ผู้ดูแล)</span>' : ''}<br><span class="muted">${esc(t.org || t.username)}</span></td>
           <td>${bar(cnt(mine, 'pass'), cnt(mine, 'fail'), cnt(mine, 'block'), cases.length)}</td><td class="n">${mine.length}/${cases.length}</td>
           <td class="n">${cnt(mine, 'pass')}</td><td class="n">${cnt(mine, 'fail')}</td><td class="n">${cnt(mine, 'block')}</td><td>${last ? fmtDT(last) : '-'}</td></tr>`;
       }).join('') + '</tbody></table>' : '<span class="muted">ยังไม่มีผู้ทดสอบสมัครสมาชิก</span>';
@@ -550,8 +558,8 @@
       }).join('') + '</tbody></table>';
     const issues = all.filter(r => r.v === 'fail' || r.v === 'block').sort((a, b) => b.t - a.t);
     $('dIssueN').textContent = issues.length ? `(${issues.length} รายการ)` : '';
-    $('dIssues').innerHTML = issues.length ? `<table><thead><tr><th>เวลา</th><th>ผู้ทดสอบ</th><th>ข้อ</th><th>โจทย์</th><th>ผล</th><th>ผลที่ได้จริง / ปัญหาที่พบ</th><th>วันที่ / รุ่น</th><th>ภาพ</th></tr></thead><tbody>`
-      + issues.map(r => `<tr><td>${fmtDT(r.t)}</td><td>${esc(names[r.user] || r.user)}</td><td><b>${esc(r.code)}</b></td><td>${esc(codes[r.code].task)}</td>
+    $('dIssues').innerHTML = issues.length ? `<table><thead><tr><th class="n">ลำดับ</th><th>เวลา</th><th>ผู้ทดสอบ</th><th>ข้อ</th><th>โจทย์</th><th>ผล</th><th>ผลที่ได้จริง / ปัญหาที่พบ</th><th>วันที่ / รุ่น</th><th>ภาพ</th></tr></thead><tbody>`
+      + issues.map((r, ri) => `<tr><td class="n">${ri + 1}</td><td>${fmtDT(r.t)}</td><td>${esc(names[r.user] || r.user)}</td><td><b>${esc(r.code)}</b></td><td>${esc(codes[r.code].task)}</td>
           <td><span class="pill ${r.v}">${SHORT[r.v]}</span></td><td>${esc(r.note) || '<span class="muted">-</span>'}</td><td>${esc(r.day)}<br>${esc(r.ver)}</td>
           <td>${r.img.map((u, k) => `<a href="${esc(u)}" target="_blank" rel="noopener">${k + 1}</a>`).join(' ') || '-'}</td></tr>`).join('') + '</tbody></table>'
       : '<span class="muted">ยังไม่มีข้อที่ไม่ผ่านหรือติดปัญหา</span>';
@@ -559,19 +567,49 @@
     sel.innerHTML = '<option value="">ทุกระบบ</option>' + sysNames.map(g => `<option ${g === keep ? 'selected' : ''}>${esc(g)}</option>`).join('');
     const mcases = cases.filter(c => !sel.value || c.sysName === sel.value);
     const sym = { pass: '✓', fail: '✗', block: '!' };
-    $('dMatrix').innerHTML = people.length ? `<table class="mx"><thead><tr><th class="l">ข้อทดสอบ</th>${people.map(t => `<th class="u">${esc(t.full)}</th>`).join('')}</tr></thead><tbody>`
-      + mcases.map(c => `<tr><td class="l"><b>${esc(c.code)}</b> ${esc(c.task)}</td>` + people.map(t => {
+    $('dMatrix').innerHTML = people.length ? `<table class="mx"><thead><tr><th class="n">ลำดับ</th><th class="l">ข้อทดสอบ</th>${people.map(t => `<th class="u">${esc(t.full)}</th>`).join('')}</tr></thead><tbody>`
+      + mcases.map((c, ci) => `<tr><td class="n">${ci + 1}</td><td class="l"><b>${esc(c.code)}</b> ${esc(c.task)}</td>` + people.map(t => {
         const r = (R[t.username] || {})[c.code] || {};
         const tip = r.v ? `${SHORT[r.v]} · ${r.day || ''} · ${r.ver || ''}${r.note ? '\n' + r.note : ''}` : 'ยังไม่ทำ';
         return `<td title="${esc(tip)}"><b class="m ${r.v || ''}">${sym[r.v] || '·'}</b></td>`;
       }).join('') + '</tr>').join('') + '</tbody></table>' : '';
-    $('dLog').innerHTML = d.log.length ? `<table><thead><tr><th>เวลา</th><th>ผู้ใช้</th><th>รายการ</th><th>ข้อ</th><th>ผล</th><th>ข้อความ</th></tr></thead><tbody>`
-      + d.log.map(l => `<tr><td>${fmtDT(l.t)}</td><td>${esc(l.full || l.user)}</td><td>${esc(l.what)}</td><td>${esc(l.code)}</td><td>${l.from || l.to ? esc(l.from || '-') + ' → ' + esc(l.to || '-') : ''}</td><td>${esc(l.note)}</td></tr>`).join('') + '</tbody></table>'
+    $('dLog').innerHTML = d.log.length ? `<table><thead><tr><th class="n">ลำดับ</th><th>เวลา</th><th>ผู้ใช้</th><th>รายการ</th><th>ข้อ</th><th>ผล</th><th>ข้อความ</th></tr></thead><tbody>`
+      + d.log.map((l, li) => `<tr><td class="n">${li + 1}</td><td>${fmtDT(l.t)}</td><td>${esc(l.full || l.user)}</td><td>${esc(l.what)}</td><td>${esc(l.code)}</td><td>${l.from || l.to ? esc(l.from || '-') + ' → ' + esc(l.to || '-') : ''}</td><td>${esc(l.note)}</td></tr>`).join('') + '</tbody></table>'
       : '<span class="muted">ยังไม่มีกิจกรรม</span>';
   }
   $('dashBtn').onclick = () => ($('dash').hidden ? showDash() : hideDash());
   $('dBack').onclick = hideDash;
   $('dRefresh').onclick = loadDash;
+  const stamp8 = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear() + 543}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`; };
+  $('dPdf').onclick = () => {
+    if (!dash) return toast('ยังไม่มีข้อมูล');
+    document.body.classList.add('print-dash');
+    const title = document.title; document.title = 'แดชบอร์ดสรุปผลการทดสอบ-' + stamp8();
+    const done = () => { document.body.classList.remove('print-dash'); document.title = title; window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    window.print(); setTimeout(done, 1500);
+  };
+  function loadScript(src) {
+    return new Promise((ok, bad) => { if (window.htmlToImage) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => bad(new Error('โหลดเครื่องมือสร้างรูปไม่ได้')); document.head.appendChild(s); });
+  }
+  $('dImg').onclick = async () => {
+    if (!dash) return toast('ยังไม่มีข้อมูล');
+    const btn = $('dImg'); btn.disabled = true; toast('กำลังสร้างรูปภาพ…');
+    try {
+      // html-to-image วาดผ่านเบราว์เซอร์เอง (รองรับฟอนต์ไทยและสีแบบ color-mix)
+      await loadScript('https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js');
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      const el = $('dash');
+      document.body.classList.add('snap-dash'); await new Promise(r => requestAnimationFrame(() => setTimeout(r, 50)));
+      const url = await window.htmlToImage.toPng(el, { pixelRatio: 2, backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff', style: { margin: '0' }, width: el.offsetWidth,
+        filter: n => !(n.classList && (n.classList.contains('dash-act') || n.id === 'dErr')) });
+      const a = document.createElement('a'); a.download = 'แดชบอร์ดสรุปผลการทดสอบ-' + stamp8() + '.png';
+      document.body.classList.remove('snap-dash');
+      a.href = url; document.body.appendChild(a); a.click(); a.remove();
+      toast('บันทึกรูปภาพแล้ว (ดูในโฟลเดอร์ดาวน์โหลด)');
+    } catch (e) { document.body.classList.remove('snap-dash'); toast('สร้างรูปภาพไม่สำเร็จ: ' + e.message); }
+    btn.disabled = false;
+  };
   async function saveDays() {
     const days = [...document.querySelectorAll('#dDays input:checked')].map(i => i.value);
     if (!days.length) return toast('เลือกอย่างน้อย 1 วัน');

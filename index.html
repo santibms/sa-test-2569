@@ -68,10 +68,11 @@
 
   /* ---------------- หน้าบันทึกผล ---------------- */
   .bar { position: sticky; top: 0; z-index: 30; background: #fff; border-bottom: 1px solid var(--line); }
-  .bar .in { max-width: 1320px; margin: 0 auto; padding: 8px 20px; display: flex; align-items: center; gap: 14px; min-height: 56px; }
+  .bar .in { max-width: none; margin: 0; padding: 8px 24px; display: flex; align-items: center; gap: 14px; min-height: 56px; }
   .menu-btn { display: none; white-space: nowrap; flex: none; align-items: center; gap: 8px; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 7px 12px; font-weight: 600; color: var(--brand-d); cursor: pointer; }
-  .brand { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .brand b { color: var(--brand-d); font-size: 17px; } .brand span { color: var(--muted); font-size: 14px; margin-left: 10px; }
+  .brand { flex: 1 1 auto; min-width: 0; white-space: nowrap; display: flex; align-items: baseline; gap: 10px; overflow: hidden; }
+  .brand b { flex: none; }
+  .brand b { color: var(--brand-d); font-size: 17px; } .brand span { color: var(--muted); font-size: 14px; flex: none; }
   .net { font-size: 13.5px; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
   .net.ok { color: var(--pass); background: #e6f4ea; } .net.wait { color: #9a5b00; background: #fff1d6; } .net.down { color: #b3261e; background: #fdecea; }
   .prog { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); white-space: nowrap; }
@@ -175,6 +176,7 @@
 
   .adm { display: flex; align-items: center; gap: 8px; font-size: 14.5px; margin: 2px 0 10px; cursor: pointer; }
   .adm input { width: 18px; height: 18px; accent-color: var(--brand); }
+  body.snap-dash .dash-act, body.snap-dash #dErr { display: none !important; }
   .dash-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; }
   .sys-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; text-decoration: none; }
   .closed { font-size: 13px; color: var(--muted); background: var(--label); padding: 6px 14px; border-top: 1px solid var(--line); }
@@ -224,7 +226,7 @@
   .auth-theme .dot2[aria-pressed=true] { box-shadow: 0 0 0 2px var(--ink); }
 
   /* ---------------- แท็บเล็ต / มือถือ ---------------- */
-  @media (max-width: 1440px) { .brand span { display: none; } }
+  @media (max-width: 1800px) { .brand span { display: none; } }   /* ชื่อรองแสดงเฉพาะจอกว้าง ไม่แสดงแบบถูกตัด */
   @media (max-width: 1180px) {
     .menu-btn { display: inline-flex; }
     .brand span, .prog .meter, .sys-btn span { display: none; }
@@ -261,9 +263,22 @@
   /* ---------------- ฉบับพิมพ์ (รูปแบบเดียวกับเอกสาร Word) ---------------- */
   #print-area { display: none; }
   @page { size: A4; margin: 0; }
+  #dash { page: dashp; }
+  @page dashp { size: A4 landscape; margin: 8mm; }
+  @media print {
+    body.print-dash #app { display: block !important; }
+    body.print-dash .bar, body.print-dash .layout, body.print-dash .zoom, body.print-dash .dash-act, body.print-dash #dErr, body.print-dash #print-area, body.print-dash .toast { display: none !important; }
+    body.print-dash #dash { display: grid !important; max-width: none; padding: 0; gap: 8px; }
+    body.print-dash .card, body.print-dash .kpi { break-inside: avoid; box-shadow: none; }
+    body.print-dash .scroll { overflow: visible; }
+    body.print-dash .dgrid { grid-template-columns: 1.3fr 1fr; }
+    body.print-dash .kpis { grid-template-columns: repeat(5, 1fr); }
+    body.print-dash * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
   @media print {
     body { background: #fff !important; color: #000; font: 11pt/1.45 'Sarabun', sans-serif; }
-    #auth, #app, .toast, .zoom { display: none !important; }
+    body:not(.print-dash) #auth, body:not(.print-dash) #app, .toast, .zoom { display: none !important; }
+    body.print-dash #auth { display: none !important; }
     #print-area { display: block; }
     .p-page { padding: 14mm 14mm 12mm 20mm; break-after: page; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
     .p-page:last-child { break-after: auto; }
@@ -397,7 +412,9 @@
       <div class="dash-act">
         <div class="verset" id="dDays">เปิดให้ทดสอบ</div>
         <label class="verset">รุ่นโปรแกรมปัจจุบัน <input id="dVer" placeholder="เช่น v1.179.0" aria-label="รุ่นโปรแกรมปัจจุบัน"><button class="btn" id="dVerSave">บันทึกรุ่น</button></label>
-        <button class="btn" id="dRefresh">รีเฟรช</button><a class="btn" id="dSheet" target="_blank" rel="noopener">เปิด Google Sheet</a><button class="btn primary" id="dBack">กลับไปหน้าบันทึกผล</button></div>
+        <button class="btn" id="dRefresh">รีเฟรช</button>
+        <button class="btn" id="dPdf" title="พิมพ์ หรือบันทึกเป็น PDF">พิมพ์ / PDF</button>
+        <button class="btn" id="dImg" title="บันทึกหน้าแดชบอร์ดเป็นรูปภาพ PNG">บันทึกเป็นรูปภาพ</button><a class="btn" id="dSheet" target="_blank" rel="noopener">เปิด Google Sheet</a><button class="btn primary" id="dBack">กลับไปหน้าบันทึกผล</button></div>
     </div>
     <div class="notice" id="dErr" hidden></div>
     <div class="kpis" id="dKpi"></div>
