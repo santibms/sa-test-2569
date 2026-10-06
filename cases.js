@@ -1,6 +1,6 @@
 // สร้างจาก tools/build_web_app.py ห้ามแก้ไฟล์นี้โดยตรง
 window.SA_DATA = {
-"built": "2026-10-07 05:54",
+"built": "2026-10-07 06:12",
 "db": "โรงพยาบาลน่าน ทดสอบ",
 "systems": [
 {
@@ -3797,5 +3797,139 @@ window.SA_DATA = {
 "img": "img/st_report_center.jpg",
 "shotCap": "Report Center › รายงาน (รายชื่อรายงานทั้งหมดของหน่วยงาน)"
 }
+],
+"extraImg": {
+"HB-01": [
+"img/hb_coa_add.jpg",
+"หน้าจอ ผังบัญชี › เพิ่มบัญชี (Herbal ERP)"
+],
+"HB-02": [
+"img/hb_je_add.jpg",
+"หน้าจอ รายการบันทึกบัญชี › เพิ่มรายการ (Herbal ERP)"
+],
+"HB-03": [
+"img/hb_je_add.jpg",
+"หน้าจอ รายการบันทึกบัญชี › เพิ่มรายการ (Herbal ERP)"
+],
+"HB-04": [
+"img/hb_je_list.jpg",
+"หน้าจอ รายการบันทึกบัญชี (Herbal ERP)"
+],
+"HB-05": [
+"img/hb_ap_inv_add.jpg",
+"หน้าจอ บัญชีเจ้าหนี้ › ใบแจ้งหนี้ › เพิ่มใบแจ้งหนี้ (Herbal ERP)"
+],
+"HB-06": [
+"img/hb_ap_pay_add.jpg",
+"หน้าจอ บัญชีเจ้าหนี้ › การชำระเงิน › บันทึกการชำระเงิน (Herbal ERP)"
+],
+"HB-07": [
+"img/hb_ap_pay_add.jpg",
+"หน้าจอ บัญชีเจ้าหนี้ › การชำระเงิน › บันทึกการชำระเงิน (Herbal ERP)"
+],
+"HB-08": [
+"img/hb_ap_aging.jpg",
+"หน้าจอ รายงานอายุหนี้เจ้าหนี้ (Herbal ERP)"
+],
+"HB-09": [
+"img/hb_ar_inv_add.jpg",
+"หน้าจอ บัญชีลูกหนี้ › ใบแจ้งหนี้ › เพิ่มใบแจ้งหนี้ (Herbal ERP)"
+],
+"HB-10": [
+"img/hb_ar_rcpt_add.jpg",
+"หน้าจอ บัญชีลูกหนี้ › ใบเสร็จรับเงิน › บันทึกใบเสร็จรับเงิน (Herbal ERP)"
+],
+"HB-11": [
+"img/hb_ar_rcpt_add.jpg",
+"หน้าจอ บัญชีลูกหนี้ › ใบเสร็จรับเงิน › บันทึกใบเสร็จรับเงิน (Herbal ERP)"
+],
+"HB-12": [
+"img/hb_ar_aging.jpg",
+"หน้าจอ รายงานอายุหนี้ลูกหนี้ (Herbal ERP)"
+],
+"HB-13": [
+"img/hb_tax_inv.jpg",
+"หน้าจอ ทะเบียนใบกำกับภาษี (Herbal ERP)"
+],
+"HB-14": [
+"img/hb_ar_inv_list.jpg",
+"หน้าจอ บัญชีลูกหนี้ › ใบแจ้งหนี้ลูกหนี้ (Herbal ERP)"
+],
+"HB-15": [
+"img/hb_cdn_add.jpg",
+"หน้าจอ ใบลดหนี้/เพิ่มหนี้ › สร้างใบใหม่ (Herbal ERP)"
+],
+"HB-16": [
+"img/hb_vat.jpg",
+"หน้าจอ รายงานภาษีมูลค่าเพิ่ม (Herbal ERP)"
+],
+"HB-17": [
+"img/hb_cheque.jpg",
+"หน้าจอ ทะเบียนเช็คจ่าย (Herbal ERP)"
+],
+"HB-18": [
+"img/hb_bank_rec.jpg",
+"หน้าจอ กระทบยอดธนาคาร (Herbal ERP)"
+],
+"HB-19": [
+"img/hb_cash_flow.jpg",
+"หน้าจอ งบกระแสเงินสด (Herbal ERP)"
+],
+"HB-20": [
+"img/hb_fa_add.jpg",
+"หน้าจอ สินทรัพย์ถาวร › เพิ่มสินทรัพย์ (Herbal ERP)"
+],
+"HB-21": [
+"img/hb_fa_list.jpg",
+"หน้าจอ สินทรัพย์ถาวร (Herbal ERP)"
+],
+"HB-22": [
+"img/hb_fa_list.jpg",
+"หน้าจอ สินทรัพย์ถาวร (Herbal ERP)"
+],
+"HB-23": [
+"img/hb_period_close.jpg",
+"หน้าจอ ปิดงวดบัญชี (Herbal ERP)"
+],
+"HB-24": [
+"img/hb_je_add.jpg",
+"หน้าจอ รายการบันทึกบัญชี › เพิ่มรายการ (Herbal ERP)"
+],
+"HB-25": [
+"img/hb_matching.jpg",
+"หน้าจอ การจับคู่ 3 ทาง (Herbal ERP)"
+],
+"HB-26": [
+"img/hb_matching.jpg",
+"หน้าจอ การจับคู่ 3 ทาง (Herbal ERP)"
+],
+"HB-27": [
+"img/hb_approvals.jpg",
+"หน้าจอ แดชบอร์ดการอนุมัติ (Herbal ERP)"
+],
+"HB-28": [
+"img/hb_tb.jpg",
+"หน้าจอ งบทดลอง (Herbal ERP)"
+],
+"HB-29": [
+"img/hb_gl.jpg",
+"หน้าจอ บัญชีแยกประเภท (Herbal ERP)"
+],
+"HB-30": [
+"img/hb_bs.jpg",
+"หน้าจอ งบแสดงฐานะการเงิน (Herbal ERP)"
+],
+"HB-31": [
+"img/hb_is.jpg",
+"หน้าจอ งบกำไรขาดทุน (Herbal ERP)"
+],
+"HB-32": [
+"img/hb_po.jpg",
+"หน้าจอ จัดซื้อ › ใบสั่งซื้อ (Herbal ERP)"
+],
+"HB-33": [
+"img/hb_so.jpg",
+"หน้าจอ ขาย › ใบสั่งขาย (Herbal ERP)"
 ]
+}
 };

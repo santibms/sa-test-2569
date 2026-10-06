@@ -106,6 +106,7 @@
 
   // ======================================================================= ข้อทดสอบ
   const SYS_ORDER = DATA.systems.map(s => s.n);
+  const EXI = DATA.extraImg || {};   // ภาพประกอบของข้อที่เพิ่มผ่านแท็บข้อทดสอบ
   function buildList(serverCases) {
     const builtin = {}; BUILTIN.forEach(c => { builtin[c.code] = c; });
     const hidden = {}, extras = [];
@@ -115,7 +116,7 @@
       const info = TYPE_INFO[s.type] ? s.type : 'Positive';
       extras.push({ sys: 'X', sysName: s.sysName || 'ข้อทดสอบเพิ่มเติม', sec: 'ข้อทดสอบ', code: s.code, task: s.task, type: info,
                     typeNote: '', slot: s.slot, menu: s.menu, pre: '', steps: String(s.steps || '').split('\n').map(x => x.trim()).filter(Boolean),
-                    data: s.data, sample: [], items: null, jes: [], expect: s.expect, note: '', img: '', shotCap: '', extra: true });
+                    data: s.data, sample: [], items: null, jes: [], expect: s.expect, note: '', img: (EXI[s.code] || [])[0] || '', shotCap: (EXI[s.code] || [])[1] || '', extra: true });
     });
     const out = [];
     const groups = SYS_ORDER.concat(extras.map(e => e.sysName).filter(n => SYS_ORDER.indexOf(n) < 0));
@@ -613,8 +614,10 @@
           <td>${r.img.map((u, k) => `<a href="${esc(u)}" target="_blank" rel="noopener">${k + 1}</a>`).join(' ') || '-'}</td></tr>`).join('') + '</tbody></table>'
       : '<span class="muted">ยังไม่มีข้อที่ไม่ผ่านหรือติดปัญหา</span>';
     const sel = $('dSysF'), keep = sel.value;
-    sel.innerHTML = '<option value="">ทุกระบบ</option>' + sysNames.map(g => `<option ${g === keep ? 'selected' : ''}>${esc(g)}</option>`).join('');
-    const mcases = cases.filter(c => !sel.value || c.sysName === sel.value);
+    // ตัวเลือกระบบแสดงทุกระบบ รวมระบบที่ยังไม่ถึงวันเปิดทดสอบ (เช่น Herbal ERP วันที่ 8)
+    const allCases = d.cases.filter(c => c.show), allSys = allCases.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i);
+    sel.innerHTML = '<option value="">ทุกระบบ</option>' + allSys.map(g => `<option value="${esc(g)}" ${g === keep ? 'selected' : ''}>${esc(g)}${sysNames.indexOf(g) < 0 ? ' (ยังไม่เปิดให้ทดสอบ)' : ''}</option>`).join('');
+    const mcases = sel.value ? allCases.filter(c => c.sysName === sel.value) : cases;
     const sym = { pass: '✓', fail: '✗', block: '!' };
     $('dMatrix').innerHTML = people.length ? `<table class="mx"><thead><tr><th class="n">ลำดับ</th><th class="l">ข้อทดสอบ</th>${people.map(t => `<th class="u">${esc(t.full)}</th>`).join('')}</tr></thead><tbody>`
       + mcases.map((c, ci) => `<tr><td class="n">${ci + 1}</td><td class="l"><b>${esc(c.code)}</b> ${esc(c.task)}</td>` + people.map(t => {
