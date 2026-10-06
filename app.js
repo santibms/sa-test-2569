@@ -113,7 +113,7 @@
       if (builtin[s.code]) { if (!s.show) hidden[s.code] = true; return; }
       if (!s.show || !s.code) return;
       const info = TYPE_INFO[s.type] ? s.type : 'Positive';
-      extras.push({ sys: 'X', sysName: s.sysName || 'ข้อทดสอบเพิ่มเติม', sec: 'ข้อทดสอบเพิ่มเติม', code: s.code, task: s.task, type: info,
+      extras.push({ sys: 'X', sysName: s.sysName || 'ข้อทดสอบเพิ่มเติม', sec: 'ข้อทดสอบ', code: s.code, task: s.task, type: info,
                     typeNote: '', slot: s.slot, menu: s.menu, pre: '', steps: String(s.steps || '').split('\n').map(x => x.trim()).filter(Boolean),
                     data: s.data, sample: [], items: null, jes: [], expect: s.expect, note: '', img: '', shotCap: '', extra: true });
     });
@@ -128,7 +128,7 @@
     LIST = out.filter(c => admin || !c.slot || days.some(d => c.slot.indexOf(d) === 0) || ((state && state.res[c.code]) || {}).v);
     if (!LIST.length) LIST = out;
   }
-  const TEST_DAYS = ['5 ต.ค. 2569', '6 ต.ค. 2569', '7 ต.ค. 2569'];
+  const TEST_DAYS = ['5 ต.ค. 2569', '6 ต.ค. 2569', '7 ต.ค. 2569', '8 ต.ค. 2569'];
   function openDays() { const d = state && state.current && state.current.days; return d && d.length ? d : TEST_DAYS.slice(0, 1); }
   const idxOf = code => LIST.findIndex(c => c.code === code);
   const cur = () => LIST[Math.max(0, idxOf(state.code))] || LIST[0];
@@ -233,6 +233,7 @@
     const u = session.user;
     state = Object.assign({ code: '', res: {}, current: { ver: '' }, serverCases: null }, store.get(KEY.state(u.username), {}));
     if (current && current.ver) state.current.ver = current.ver;
+    if (current && current.days && current.days.length) state.current.days = current.days;   // วันที่เปิดให้ทดสอบจากการเข้าระบบ (ไม่ใช่ค่าเก่าในเครื่อง)
     outbox = store.get(KEY.outbox(u.username), []);
     buildList(state.serverCases);
     if (idxOf(state.code) < 0) state.code = LIST[0].code;
@@ -248,6 +249,7 @@
       session.user = j.user; store.set(KEY.session, session);
       $('dashBtn').hidden = j.user.role !== 'admin';
       state.serverCases = j.cases || null;
+      if (j.current) { if (j.current.days && j.current.days.length) state.current.days = j.current.days; if (j.current.ver) { state.current.ver = j.current.ver; $('curVer').textContent = j.current.ver; } }
       const pend = {}; outbox.forEach(o => { pend[o.code] = true; });
       const merged = {};
       Object.keys(j.results || {}).forEach(code => { merged[code] = j.results[code]; });
