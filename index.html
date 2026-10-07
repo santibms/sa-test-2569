@@ -113,6 +113,7 @@
   .legend span::before { content: '●'; margin-right: 4px; }
   .legend .p::before { color: var(--pass); } .legend .f::before { color: var(--fail); } .legend .b::before { color: #e09a24; } .legend .t::before { color: #c8cfdb; }
   .printbox { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .psys { grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 14px; background: #fff; min-width: 0; }
   .btn { font-size: 15px; font-weight: 600; border-radius: 8px; padding: 9px 14px; cursor: pointer; border: 1px solid color-mix(in srgb, var(--brand) 30%, #c8ccd2); background: #fff; color: var(--brand-d);
          display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; }
   .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
@@ -177,7 +178,14 @@
 
   .adm { display: flex; align-items: center; gap: 8px; font-size: 14.5px; margin: 2px 0 10px; cursor: pointer; }
   .adm input { width: 18px; height: 18px; accent-color: var(--brand); }
-  body.snap-dash .dash-act, body.snap-dash #dErr, body.snap-dash #dLogCard { display: none !important; }
+  body.snap-dash .dash-act, body.snap-dash #dErr, body.snap-dash #dLogCard, body.snap-dash .dact, body.snap-dash .ans-btn, body.snap-dash .ans-ed { display: none !important; }
+  .btn.sm { font-size: 13.5px; padding: 3px 10px; min-height: 30px; white-space: nowrap; }
+  .igrp td { background: var(--label); font-weight: 700; color: var(--brand-d); }   /* หัวกลุ่มระบบในตารางข้อที่ไม่ผ่าน */
+  .ans { margin-top: 6px; padding: 6px 8px; border-left: 3px solid var(--brand); background: var(--soft); border-radius: 4px; font-size: 14px; }
+  .ans small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .ans-btn { all: unset; cursor: pointer; color: var(--brand-d); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; margin-top: 4px; display: inline-block; }
+  .ans small .ans-btn { margin: 0 0 0 6px; }
+  .ans-ed textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 14px; margin: 6px 0 4px; }
   .dash-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; }
   .sys-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; text-decoration: none; }
   .closed { font-size: 13px; color: var(--muted); background: var(--label); padding: 6px 14px; border-top: 1px solid var(--line); }
@@ -274,6 +282,7 @@
   @media print {
     body.print-dash #app { display: block !important; }
     body.print-dash .bar, body.print-dash .layout, body.print-dash .zoom, body.print-dash .dash-act, body.print-dash #dErr, body.print-dash #dLogCard, body.print-dash #print-area, body.print-dash .toast { display: none !important; }
+    body.print-dash .dact, body.print-dash .ans-btn, body.print-dash .ans-ed { display: none !important; }
     body.print-dash .mx tfoot { display: table-row-group; }   /* แถวสรุปพิมพ์ครั้งเดียวท้ายตาราง ไม่ซ้ำทุกหน้า */
     body.print-dash #dash { display: grid !important; max-width: none; padding: 0; gap: 8px; }
     body.print-dash .card, body.print-dash .kpi { break-inside: avoid; box-shadow: none; }
@@ -291,6 +300,7 @@
     .p-page:last-child { break-after: auto; }
     .p-hd { display: flex; justify-content: space-between; gap: 12px; font-size: 8.5pt; color: #555; border-bottom: 1px solid #bbb; padding-bottom: 2px; margin-bottom: 8px; }
     .p-title { font-size: 14pt; font-weight: 700; color: #1f3864; margin: 2px 0 6px; }
+    .p-ans { margin-top: 3px; padding: 2px 5px; border-left: 2px solid #1f3864; background: #f3f5fa; font-size: 9.5pt; }
     .p table { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin: 2px 0 8px; }
     .p th, .p td { border: 1px solid #9aa3b5; padding: 2px 6px; vertical-align: top; text-align: left; }
     .p tr { break-inside: avoid; }
@@ -401,6 +411,7 @@
         <div class="legend"><span class="p">ผ่าน</span><span class="f">ไม่ผ่าน</span><span class="b">ติดปัญหา</span><span class="t">ยังไม่ทำ</span></div>
       </nav>
       <div class="printbox">
+        <select id="printSys" class="psys" aria-label="ระบบที่จะพิมพ์"></select>
         <button class="btn" id="printSum">พิมพ์สรุปผล</button>
         <button class="btn" id="printAll">พิมพ์ทั้งเล่ม</button>
       </div>
@@ -426,10 +437,10 @@
     <div class="notice" id="dErr" hidden></div>
     <div class="kpis" id="dKpi"></div>
     <div class="dgrid">
-      <div class="card"><h3>ความคืบหน้าของผู้ทดสอบ</h3><div class="scroll" id="dTesters"></div></div>
+      <div class="card"><h3>ความคืบหน้าของผู้ทดสอบ</h3><div class="mtools dact"><select id="dPrintSys" aria-label="ระบบที่จะพิมพ์ผลรายคน"></select><span>ระบบที่จะพิมพ์ เมื่อกดปุ่มพิมพ์ผลของผู้ทดสอบแต่ละท่าน</span></div><div class="scroll" id="dTesters"></div></div>
       <div class="card"><h3>ผลรวมตามระบบ (ทุกท่านรวมกัน)</h3><div class="scroll" id="dSys"></div></div>
     </div>
-    <div class="card"><h3>ข้อที่ไม่ผ่าน / ติดปัญหา <span class="muted" id="dIssueN"></span></h3><div class="scroll" id="dIssues"></div></div>
+    <div class="card"><h3>ข้อที่ไม่ผ่าน / ติดปัญหา <span class="muted" id="dIssueN"></span></h3><div class="mtools"><select id="dIssueSys" aria-label="เลือกระบบ"></select><span class="dact">กด "เพิ่มคำชี้แจง" เพื่อบันทึกเหตุผล วิธีที่ถูกต้อง หรือสิ่งที่แก้ไขแล้ว ของแต่ละข้อ</span></div><div class="scroll" id="dIssues"></div></div>
     <div class="card"><h3>ผลรายข้อ × ผู้ทดสอบ</h3>
       <div class="mtools"><select id="dSysF" aria-label="เลือกระบบ"></select><span class="mleg"><b class="m pass">✓</b> ผ่าน <b class="m fail">✗</b> ไม่ผ่าน <b class="m block">!</b> ติดปัญหา <b class="m">·</b> ยังไม่ทำ · ชี้ที่ช่องเพื่อดูผลที่ได้จริง</span></div>
       <div class="scroll" id="dMatrix"></div></div>
@@ -441,7 +452,7 @@
 <div id="print-area"></div>
 
 <script src="config.js"></script>
-<script src="cases.js?v=20261007-1006"></script>
-<script src="app.js?v=20261007-1006"></script>
+<script src="cases.js?v=20261008-0455"></script>
+<script src="app.js?v=20261008-0455"></script>
 </body>
 </html>

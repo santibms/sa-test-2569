@@ -41,6 +41,7 @@
 
   let session = store.get(KEY.session, null);   // { token, user: { username, full, org } }
   let state = null;                             // { code, res: { [code]: { v, note, t, img: [], day, ver } }, current: { ver }, serverCases }
+  let myAnswers = {};                          // คำชี้แจง / แนวทางแก้ไขของผู้ดูแลต่อผลของผู้ใช้นี้ { [code]: { text, by, t } }
   let outbox = [];                              // ผลที่ยังไม่ได้ส่ง (ล่าสุดของแต่ละข้อ)
   let LIST = BUILTIN.slice();                   // ข้อทดสอบที่แสดง (ข้อตั้งต้น + ข้อที่แอดมินเพิ่ม)
   const localShots = {};                        // ภาพที่แนบในรอบนี้ (ใช้แสดงและพิมพ์)
@@ -51,7 +52,7 @@
   // (วัดแล้ว: โค้ดของเราทำงานเสร็จในไม่กี่มิลลิวินาที ความช้าอยู่ที่ระบบส่งคำตอบ script.googleusercontent.com ของ Google)
   // คำขอที่ส่งซ้ำได้อย่างปลอดภัย: ถ้ายังไม่ตอบภายในเวลาที่กำหนด ส่งคำขอสำรองคู่ขนาน แล้วใช้คำตอบที่มาถึงก่อน
   // (สมัครสมาชิก และแนบภาพ ไม่ส่งซ้ำ เพราะจะได้บัญชีหรือไฟล์ภาพซ้ำ)
-  const HEDGE = { login: 1, me: 1, save: 1, dashboard: 1, logout: 1, setCurrent: 1, setOpenDays: 1, diag: 1 };
+  const HEDGE = { login: 1, me: 1, save: 1, dashboard: 1, logout: 1, setCurrent: 1, setOpenDays: 1, diag: 1, answer: 1 };
   const HEDGE_AT = [0, 7000, 16000];            // เวลาที่เริ่มคำขอที่ 1, 2, 3 (มิลลิวินาที)
   const MAX_TRY = 4;                            // รวมการส่งใหม่ทันทีเมื่อคำขอก่อนหน้าล้มเหลว
   const TIMEOUT = { upload: 120000, register: 60000 };
@@ -128,6 +129,8 @@
     const days = openDays(), admin = session && session.user.role === 'admin';
     LIST = out.filter(c => admin || !c.slot || days.some(d => c.slot.indexOf(d) >= 0) || ((state && state.res[c.code]) || {}).v);
     if (!LIST.length) LIST = out;
+    const ps = $('printSys'), pk = ps.value, sy = LIST.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i);
+    ps.innerHTML = '<option value="">พิมพ์ทุกระบบ</option>' + sy.map(g => `<option value="${esc(g)}" ${g === pk ? 'selected' : ''}>${esc(g)}</option>`).join('');
   }
   const TEST_DAYS = ['5 ต.ค. 2569', '6 ต.ค. 2569', '7 ต.ค. 2569', '8 ต.ค. 2569'];
   function openDays() { const d = state && state.current && state.current.days; return d && d.length ? d : TEST_DAYS.slice(0, 1); }
@@ -250,6 +253,7 @@
       session.user = j.user; store.set(KEY.session, session);
       $('dashBtn').hidden = j.user.role !== 'admin';
       state.serverCases = j.cases || null;
+      myAnswers = {}; (j.answers || []).forEach(a => { myAnswers[a.code] = a; });
       if (j.current) { if (j.current.days && j.current.days.length) state.current.days = j.current.days; if (j.current.ver) { state.current.ver = j.current.ver; $('curVer').textContent = j.current.ver; } }
       const pend = {}; outbox.forEach(o => { pend[o.code] = true; });
       const merged = {};
@@ -563,7 +567,7 @@
     $('dTime').textContent = dash ? 'กำลังโหลดข้อมูลล่าสุด…' : 'กำลังโหลด…';
     try {
       dash = await call('dashboard', { token: session.token });
-      $('dErr').hidden = true; renderDash();
+      $('dErr').hidden = true; if (!ansEdit) renderDash(); else $('dTime').textContent = 'ข้อมูลล่าสุด ' + fmtDT(dash.time) + ' น.';
     } catch (e) {
       if (e.code === 'AUTH') return expire(e.message);
       $('dErr').textContent = 'โหลดข้อมูลไม่ได้: ' + errText(e); $('dErr').hidden = false;
@@ -593,12 +597,13 @@
       ['ผ่าน', cnt(all, 'pass'), 'pass'], ['ไม่ผ่าน', cnt(all, 'fail'), 'fail'], ['ติดปัญหา', cnt(all, 'block'), 'block']]
       .map(([k, v, c]) => `<div class="kpi ${c}"><small>${k}</small><b>${v}</b></div>`).join('');
     const bar = (p, f, b, n) => `<div class="bar2" title="ผ่าน ${p} · ไม่ผ่าน ${f} · ติดปัญหา ${b} · จาก ${n}"><i class="p" style="width:${p / n * 100}%"></i><i class="f" style="width:${f / n * 100}%"></i><i class="b" style="width:${b / n * 100}%"></i></div>`;
-    $('dTesters').innerHTML = people.length ? `<table><thead><tr><th class="n">ลำดับ</th><th>ผู้ทดสอบ</th><th>ความคืบหน้า</th><th class="n">ทำแล้ว</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th>บันทึกล่าสุด</th></tr></thead><tbody>`
+    $('dTesters').innerHTML = people.length ? `<table><thead><tr><th class="n">ลำดับ</th><th>ผู้ทดสอบ</th><th>ความคืบหน้า</th><th class="n">ทำแล้ว</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th>บันทึกล่าสุด</th><th class="dact">พิมพ์ผล</th></tr></thead><tbody>`
       + people.map((t, ti) => {
         const mine = Object.values(R[t.username] || {}).filter(r => r.v), last = Math.max(0, ...Object.values(R[t.username] || {}).map(r => r.t));
         return `<tr><td class="n">${ti + 1}</td><td><b>${esc(t.full)}</b>${t.role === 'admin' ? ' <span class="muted">(ผู้ดูแล)</span>' : ''}<br><span class="muted">${esc(t.org || t.username)}</span></td>
           <td>${bar(cnt(mine, 'pass'), cnt(mine, 'fail'), cnt(mine, 'block'), cases.length)}</td><td class="n">${mine.length}/${cases.length}</td>
-          <td class="n">${cnt(mine, 'pass')}</td><td class="n">${cnt(mine, 'fail')}</td><td class="n">${cnt(mine, 'block')}</td><td>${last ? fmtDT(last) : '-'}</td></tr>`;
+          <td class="n">${cnt(mine, 'pass')}</td><td class="n">${cnt(mine, 'fail')}</td><td class="n">${cnt(mine, 'block')}</td><td>${last ? fmtDT(last) : '-'}</td>
+          <td class="dact"><button class="btn sm" data-pu="${esc(t.username)}" data-pm="summary">สรุปผล</button> <button class="btn sm" data-pu="${esc(t.username)}" data-pm="full">ทั้งเล่ม</button></td></tr>`;
       }).join('') + '</tbody></table>' : '<span class="muted">ยังไม่มีผู้ทดสอบสมัครสมาชิก</span>';
     const sysNames = cases.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i);
     $('dSys').innerHTML = `<table><thead><tr><th>ระบบ</th><th class="n">ข้อ</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th class="n">ยังไม่ทำ</th></tr></thead><tbody>`
@@ -607,11 +612,31 @@
         return `<tr><td>${esc(g)}</td><td class="n">${cs.length}</td><td class="n">${cnt(rs, 'pass')}</td><td class="n">${cnt(rs, 'fail')}</td><td class="n">${cnt(rs, 'block')}</td><td class="n">${people.length * cs.length - rs.length}</td></tr>`;
       }).join('') + '</tbody></table>';
     const issues = all.filter(r => r.v === 'fail' || r.v === 'block').sort((a, b) => b.t - a.t);
+    // แยกตามระบบ (เรียงตามลำดับระบบในข้อทดสอบ) และเลือกดูทีละระบบได้
+    const sysOrder = d.cases.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i);
+    const isys = sysOrder.filter(g => issues.some(r => codes[r.code].sysName === g));
+    const psel = $('dPrintSys'), pkeep = psel.value;   // ระบบที่จะพิมพ์ผลรายคน
+    psel.innerHTML = '<option value="">พิมพ์ทุกระบบ</option>' + sysOrder.map(g => `<option value="${esc(g)}" ${g === pkeep ? 'selected' : ''}>${esc(g)}</option>`).join('');
+    const isel = $('dIssueSys'), ikeep = isel.value;
+    isel.innerHTML = '<option value="">ทุกระบบ</option>' + isys.map(g => `<option value="${esc(g)}" ${g === ikeep ? 'selected' : ''}>${esc(g)} (${issues.filter(r => codes[r.code].sysName === g).length})</option>`).join('');
+    const AK = {}; (d.answers || []).forEach(a => { AK[a.user + '|' + a.code] = a; });
+    const dr = $('ansTxt'); if (dr) ansDraft = dr.value;   // เก็บข้อความที่กำลังพิมพ์ไว้ ถ้ามีการวาดใหม่
+    const ansCell = r => {
+      const k = r.user + '|' + r.code, a = AK[k];
+      if (ansEdit === k) return `<div class="ans-ed"><textarea id="ansTxt" rows="3" placeholder="เช่น ระบบทำได้ โดยเข้าเมนู … / วิธีดูข้อมูลที่ถูกต้องคือ … / แก้ไขแล้วในรุ่น …">${esc(ansDraft)}</textarea>
+        <div><button class="btn primary sm" data-ans-save="${esc(k)}">บันทึกคำชี้แจง</button> <button class="btn sm" data-ans-cancel="1">ยกเลิก</button></div></div>`;
+      return a ? `<div class="ans"><b>คำชี้แจงผู้ดูแล:</b> ${esc(a.text).replace(/\n/g, '<br>')}<small>${esc(a.by)} · ${fmtDT(a.t)} น. <button class="ans-btn" data-ans="${esc(k)}">แก้ไข</button></small></div>`
+               : `<div><button class="ans-btn" data-ans="${esc(k)}">+ เพิ่มคำชี้แจง / วิธีที่ถูกต้อง</button></div>`;
+    };
+    let ino = 0;
     $('dIssueN').textContent = issues.length ? `(${issues.length} รายการ)` : '';
     $('dIssues').innerHTML = issues.length ? `<table><thead><tr><th class="n">ลำดับ</th><th>เวลา</th><th>ผู้ทดสอบ</th><th>ข้อ</th><th>โจทย์</th><th>ผล</th><th>ผลที่ได้จริง / ปัญหาที่พบ</th><th>วันที่ / รุ่น</th><th>ภาพ</th></tr></thead><tbody>`
-      + issues.map((r, ri) => `<tr><td class="n">${ri + 1}</td><td>${fmtDT(r.t)}</td><td>${esc(names[r.user] || r.user)}</td><td><b>${esc(r.code)}</b></td><td>${esc(codes[r.code].task)}</td>
-          <td><span class="pill ${r.v}">${SHORT[r.v]}</span></td><td>${esc(r.note) || '<span class="muted">-</span>'}</td><td>${esc(r.day)}<br>${esc(r.ver)}</td>
-          <td>${r.img.map((u, k) => `<a href="${esc(u)}" target="_blank" rel="noopener">${k + 1}</a>`).join(' ') || '-'}</td></tr>`).join('') + '</tbody></table>'
+      + (isel.value ? [isel.value] : isys).map(g => {
+        const rs = issues.filter(r => codes[r.code].sysName === g);
+        return `<tr class="igrp"><td colspan="9">${esc(g)} · ${rs.length} รายการ</td></tr>` + rs.map(r => `<tr><td class="n">${++ino}</td><td>${fmtDT(r.t)}</td><td>${esc(names[r.user] || r.user)}</td><td><b>${esc(r.code)}</b></td><td>${esc(codes[r.code].task)}</td>
+          <td><span class="pill ${r.v}">${SHORT[r.v]}</span></td><td>${esc(r.note) || '<span class="muted">-</span>'}${ansCell(r)}</td><td>${esc(r.day)}<br>${esc(r.ver)}</td>
+          <td>${r.img.map((u, k) => `<a href="${esc(u)}" target="_blank" rel="noopener">${k + 1}</a>`).join(' ') || '-'}</td></tr>`).join('');
+      }).join('') + '</tbody></table>'
       : '<span class="muted">ยังไม่มีข้อที่ไม่ผ่านหรือติดปัญหา</span>';
     const sel = $('dSysF'), keep = sel.value;
     // ตัวเลือกระบบแสดงทุกระบบ รวมระบบที่ยังไม่ถึงวันเปิดทดสอบ (เช่น Herbal ERP วันที่ 8)
@@ -689,16 +714,56 @@
     btn.disabled = false;
   };
   $('dSysF').onchange = () => { if (dash) renderDash(); };
+  $('dIssueSys').onchange = () => { if (dash) renderDash(); };
+  // คำชี้แจงของผู้ดูแลต่อข้อที่ไม่ผ่าน/ติดปัญหา (ผู้ทดสอบอาจไม่ทราบวิธีดูข้อมูลที่ถูกต้อง)
+  let ansEdit = null, ansDraft = '';
+  $('dIssues').onclick = async e => {
+    const b = e.target.closest('button');
+    if (!b || !dash) return;
+    if (b.dataset.ans) {
+      const a = (dash.answers || []).find(x => x.user + '|' + x.code === b.dataset.ans);
+      ansEdit = b.dataset.ans; ansDraft = a ? a.text : ''; renderDash();
+      const t = $('ansTxt'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
+    } else if (b.dataset.ansCancel) {
+      ansEdit = null; ansDraft = ''; renderDash();
+    } else if (b.dataset.ansSave) {
+      const k = b.dataset.ansSave, i = k.indexOf('|'), user = k.slice(0, i), code = k.slice(i + 1), text = ($('ansTxt').value || '').trim();
+      b.disabled = true;
+      try {
+        const j = await call('answer', { token: session.token, user, code, text });
+        dash.answers = (dash.answers || []).filter(x => !(x.user === user && x.code === code));
+        if (text) dash.answers.push(j.answer);
+        ansEdit = null; ansDraft = ''; renderDash();
+        toast(text ? 'บันทึกคำชี้แจงแล้ว' : 'ลบคำชี้แจงแล้ว');
+      } catch (er) { if (er.code === 'AUTH') return expire(er.message); b.disabled = false; toast('บันทึกไม่สำเร็จ: ' + errText(er)); }
+    }
+  };
+  // ผู้ดูแลพิมพ์สรุปผล / ทั้งเล่มของผู้ทดสอบแต่ละท่าน (ใช้ผลจากแดชบอร์ด)
+  $('dTesters').onclick = e => {
+    const b = e.target.closest('button[data-pu]');
+    if (!b || !dash) return;
+    const t = dash.testers.find(x => x.username === b.dataset.pu);
+    if (!t) return;
+    const res = {}; dash.results.filter(r => r.user === t.username).forEach(r => { res[r.code] = r; });
+    const od = (dash.current.days && dash.current.days.length) ? dash.current.days : TEST_DAYS.slice(0, 1);
+    const list = LIST.filter(c => !c.slot || od.some(x => c.slot.indexOf(x) >= 0) || (res[c.code] || {}).v);
+    const answers = {}; (dash.answers || []).filter(x => x.user === t.username).forEach(x => { answers[x.code] = x; });
+    doPrint(b.dataset.pm, { u: t, res, list, shots: {}, answers, sys: $('dPrintSys').value });
+  };
 
   // ======================================================================= ฉบับพิมพ์
-  function buildPrint(mode) {
-    const u = session.user;
+  // who = ผลของผู้ทดสอบที่จะพิมพ์ (ค่าเริ่มต้น = ผู้ใช้ที่เข้าระบบ) · who.sys = พิมพ์เฉพาะระบบ (ว่าง = ทุกระบบ)
+  // who.answers = คำชี้แจง / แนวทางแก้ไขของผู้ดูแลระบบ แยกตามรหัสข้อ
+  function buildPrint(mode, who) {
+    who = who || { u: session.user, res: state.res, list: LIST, shots: localShots, answers: myAnswers, sys: $('printSys').value };
+    const u = who.u, RES = who.res, ANS = who.answers || {}, PL = who.sys ? who.list.filter(c => c.sysName === who.sys) : who.list;
     const hd = s => `<div class="p-hd"><span>เอกสารประกอบการทดสอบระบบ BMS Smart Accounting · ${esc(s)}</span><span>ผู้ทดสอบ: ${esc(u.full)}</span></div>`;
     const mark = (r, v) => `<span class="mark">${r.v === v ? '☑' : '☐'} ${LABEL[v]}</span>`;
     const row = (k, html) => `<tr><th class="l">${k}</th><td>${html}</td></tr>`;
     const blk = (cap, inner) => `<div class="blk"><div class="cap">${cap}</div>${inner}</div>`;
-    const pages = mode !== 'full' ? [] : LIST.map((c, k) => {
-      const r = state.res[c.code] || {}, ti = TYPE_INFO[c.type] || TYPE_INFO.Positive;
+    const ans = code => ANS[code] && ANS[code].text ? esc(ANS[code].text).replace(/\n/g, '<br>') : '';
+    const pages = mode !== 'full' ? [] : PL.map((c, k) => {
+      const r = RES[c.code] || {}, ti = TYPE_INFO[c.type] || TYPE_INFO.Positive;
       return `<div class="p-page p">${hd(c.sysName)}
         <div class="p-title">${esc(c.code)} &nbsp;${esc(c.task)}</div>
         ${c.img ? `<figure><img src="${esc(c.img)}" alt=""><figcaption>ภาพที่ ${k + 1} ${esc(c.shotCap)}</figcaption></figure>` : ''}
@@ -716,35 +781,41 @@
         <div class="box"><div class="cap">บันทึกผลการทดสอบ ${esc(c.code)}</div><table>
           ${row('ผลทดสอบ', mark(r, 'pass') + mark(r, 'fail') + mark(r, 'block'))}
           <tr><th class="l">ผลที่ได้จริง / ปัญหาที่พบ</th><td style="height:16mm">${esc(r.note).replace(/\n/g, '<br>')}</td></tr>
+          ${ans(c.code) ? row('คำชี้แจง / แนวทางแก้ไข (ผู้ดูแลระบบ)', ans(c.code)) : ''}
           ${(r.img || []).length ? row('ภาพหน้าจอประกอบ', `${r.img.length} ภาพ (เก็บใน Google Drive ของทีม BMS)`) : ''}
           ${row('ผู้ทดสอบ', 'ลงชื่อ ' + esc(u.full))}
           ${row('วันที่ / รุ่นโปรแกรม', r.v || r.note ? `วันที่ ${esc(r.day || '-')} &emsp;&emsp; รุ่นโปรแกรม ${esc(r.ver || '-')}` : '<span class="dots">&nbsp;</span>')}
         </table></div>
-        ${(localShots[c.code] || []).map(s => `<figure><img src="${s.src}" alt=""><figcaption>ภาพหน้าจอที่ผู้ทดสอบแนบ</figcaption></figure>`).join('')}
+        ${(who.shots[c.code] || []).map(s => `<figure><img src="${s.src}" alt=""><figcaption>ภาพหน้าจอที่ผู้ทดสอบแนบ</figcaption></figure>`).join('')}
       </div>`;
     });
-    const n = counts();
-    const bySys = LIST.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i).map(g => {
-      const items = LIST.filter(c => c.sysName === g), k = v => items.filter(c => ((state.res[c.code] || {}).v || 'todo') === v).length;
+    const n = { pass: 0, fail: 0, block: 0, todo: 0 }; PL.forEach(c => { n[(RES[c.code] || {}).v || 'todo']++; });
+    const bySys = PL.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i).map(g => {
+      const items = PL.filter(c => c.sysName === g), k = v => items.filter(c => ((RES[c.code] || {}).v || 'todo') === v).length;
       return `<tr><td>${esc(g)}</td><td class="n">${items.length}</td><td class="n">${k('pass')}</td><td class="n">${k('fail')}</td><td class="n">${k('block')}</td><td class="n">${k('todo')}</td></tr>`;
     }).join('');
-    const summary = `<div class="p-page p">${hd('สรุปผล')}
-      <div class="p-title">สรุปผลการทดสอบระบบ BMS Smart Accounting</div>
+    const summary = `<div class="p-page p">${hd(who.sys || 'สรุปผล')}
+      <div class="p-title">สรุปผลการทดสอบระบบ BMS Smart Accounting${who.sys ? ' · ' + esc(who.sys) : ''}</div>
       <table><tr><th class="l">ผู้ทดสอบ</th><td>${esc(u.full)}${u.org ? ' · ' + esc(u.org) : ''}</td></tr>
+        <tr><th class="l">ระบบที่พิมพ์</th><td>${who.sys ? esc(who.sys) : 'ทุกระบบ'}</td></tr>
         <tr><th class="l">พิมพ์เมื่อ</th><td>${esc(new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' }))} น.</td></tr></table>
       <table><thead><tr><th>ระบบ</th><th class="n">จำนวนข้อ</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th class="n">ยังไม่ทดสอบ</th></tr></thead>
-        ${bySys}<tr class="foot"><td>รวม</td><td class="n">${LIST.length}</td><td class="n">${n.pass}</td><td class="n">${n.fail}</td><td class="n">${n.block}</td><td class="n">${n.todo}</td></tr></table>
+        ${bySys}<tr class="foot"><td>รวม</td><td class="n">${PL.length}</td><td class="n">${n.pass}</td><td class="n">${n.fail}</td><td class="n">${n.block}</td><td class="n">${n.todo}</td></tr></table>
       <table class="sum"><thead><tr><th style="width:5%">#</th><th style="width:10%">ข้อ</th><th>โจทย์</th><th style="width:9%">ประเภท</th><th style="width:10%">ผล</th><th style="width:16%">วันที่ / รุ่น</th><th style="width:28%">ผลที่ได้จริง / ปัญหาที่พบ</th></tr></thead>
-        ${LIST.map((c, k) => { const r = state.res[c.code] || {}; return `<tr><td>${k + 1}</td><td>${esc(c.code)}</td><td>${esc(c.task)}</td><td>${esc(c.type)}</td><td>${r.v ? SHORT[r.v] : '-'}</td><td>${r.v ? esc((r.day || '') + ' · ' + (r.ver || '')) : ''}</td><td>${esc(r.note)}</td></tr>`; }).join('')}
+        ${PL.map((c, k) => { const r = RES[c.code] || {}; return `<tr><td>${k + 1}</td><td>${esc(c.code)}</td><td>${esc(c.task)}</td><td>${esc(c.type)}</td><td>${r.v ? SHORT[r.v] : '-'}</td><td>${r.v ? esc((r.day || '') + ' · ' + (r.ver || '')) : ''}</td><td>${esc(r.note)}${ans(c.code) ? `<div class="p-ans"><b>แนวทางแก้ไข (ผู้ดูแลระบบ):</b> ${ans(c.code)}</div>` : ''}</td></tr>`; }).join('')}
       </table>
       <div class="sign">
         <div>ลงชื่อ <span class="dots">&nbsp;</span><br>(${esc(u.full)})<br>ผู้ทดสอบ<br>วันที่ <span class="dots" style="min-width:35%">&nbsp;</span></div>
         <div>ลงชื่อ <span class="dots">&nbsp;</span><br>(<span class="dots">&nbsp;</span>)<br>ผู้รับรองผลการทดสอบ<br>วันที่ <span class="dots" style="min-width:35%">&nbsp;</span></div>
       </div></div>`;
     $('print-area').innerHTML = pages.join('') + summary;
+    return who;
   }
-  async function doPrint(mode) {
-    buildPrint(mode);
+  async function doPrint(mode, who) {
+    who = buildPrint(mode, who);
+    const title = document.title;   // ชื่อไฟล์ PDF ตามผู้ทดสอบและระบบ
+    document.title = (mode === 'full' ? 'ผลการทดสอบทั้งเล่ม-' : 'สรุปผลการทดสอบ-') + who.u.full + (who.sys ? '-' + who.sys : '');
+    window.addEventListener('afterprint', function back() { document.title = title; window.removeEventListener('afterprint', back); });
     const imgs = [...$('print-area').querySelectorAll('img')];
     if (imgs.length) {
       toast('กำลังเตรียมเอกสาร…');
