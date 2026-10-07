@@ -597,13 +597,12 @@
       ['ผ่าน', cnt(all, 'pass'), 'pass'], ['ไม่ผ่าน', cnt(all, 'fail'), 'fail'], ['ติดปัญหา', cnt(all, 'block'), 'block']]
       .map(([k, v, c]) => `<div class="kpi ${c}"><small>${k}</small><b>${v}</b></div>`).join('');
     const bar = (p, f, b, n) => `<div class="bar2" title="ผ่าน ${p} · ไม่ผ่าน ${f} · ติดปัญหา ${b} · จาก ${n}"><i class="p" style="width:${p / n * 100}%"></i><i class="f" style="width:${f / n * 100}%"></i><i class="b" style="width:${b / n * 100}%"></i></div>`;
-    $('dTesters').innerHTML = people.length ? `<table><thead><tr><th class="n">ลำดับ</th><th>ผู้ทดสอบ</th><th>ความคืบหน้า</th><th class="n">ทำแล้ว</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th>บันทึกล่าสุด</th><th class="dact">พิมพ์ผล</th></tr></thead><tbody>`
+    $('dTesters').innerHTML = people.length ? `<table><thead><tr><th class="n">ลำดับ</th><th>ผู้ทดสอบ</th><th>ความคืบหน้า</th><th class="n">ทำแล้ว</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th>บันทึกล่าสุด</th></tr></thead><tbody>`
       + people.map((t, ti) => {
         const mine = Object.values(R[t.username] || {}).filter(r => r.v), last = Math.max(0, ...Object.values(R[t.username] || {}).map(r => r.t));
         return `<tr><td class="n">${ti + 1}</td><td><b>${esc(t.full)}</b>${t.role === 'admin' ? ' <span class="muted">(ผู้ดูแล)</span>' : ''}<br><span class="muted">${esc(t.org || t.username)}</span></td>
           <td>${bar(cnt(mine, 'pass'), cnt(mine, 'fail'), cnt(mine, 'block'), cases.length)}</td><td class="n">${mine.length}/${cases.length}</td>
-          <td class="n">${cnt(mine, 'pass')}</td><td class="n">${cnt(mine, 'fail')}</td><td class="n">${cnt(mine, 'block')}</td><td>${last ? fmtDT(last) : '-'}</td>
-          <td class="dact"><button class="btn sm" data-pu="${esc(t.username)}" data-pm="summary">สรุปผล</button> <button class="btn sm" data-pu="${esc(t.username)}" data-pm="full">ทั้งเล่ม</button></td></tr>`;
+          <td class="n">${cnt(mine, 'pass')}</td><td class="n">${cnt(mine, 'fail')}</td><td class="n">${cnt(mine, 'block')}</td><td>${last ? fmtDT(last) : '-'}</td></tr>`;
       }).join('') + '</tbody></table>' : '<span class="muted">ยังไม่มีผู้ทดสอบสมัครสมาชิก</span>';
     const sysNames = cases.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i);
     $('dSys').innerHTML = `<table><thead><tr><th>ระบบ</th><th class="n">ข้อ</th><th class="n">ผ่าน</th><th class="n">ไม่ผ่าน</th><th class="n">ติดปัญหา</th><th class="n">ยังไม่ทำ</th></tr></thead><tbody>`
@@ -615,7 +614,9 @@
     // แยกตามระบบ (เรียงตามลำดับระบบในข้อทดสอบ) และเลือกดูทีละระบบได้
     const sysOrder = d.cases.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i);
     const isys = sysOrder.filter(g => issues.some(r => codes[r.code].sysName === g));
-    const psel = $('dPrintSys'), pkeep = psel.value;   // ระบบที่จะพิมพ์ผลรายคน
+    const pw = $('dPrintWho'), pwk = pw.value;   // แถบพิมพ์ผลรายบุคคล: ผู้ทดสอบ + ระบบ
+    pw.innerHTML = people.map(t => `<option value="${esc(t.username)}" ${t.username === pwk ? 'selected' : ''}>${esc(t.full)}</option>`).join('');
+    const psel = $('dPrintSys'), pkeep = psel.value;
     psel.innerHTML = '<option value="">พิมพ์ทุกระบบ</option>' + sysOrder.map(g => `<option value="${esc(g)}" ${g === pkeep ? 'selected' : ''}>${esc(g)}</option>`).join('');
     const isel = $('dIssueSys'), ikeep = isel.value;
     isel.innerHTML = '<option value="">ทุกระบบ</option>' + isys.map(g => `<option value="${esc(g)}" ${g === ikeep ? 'selected' : ''}>${esc(g)} (${issues.filter(r => codes[r.code].sysName === g).length})</option>`).join('');
@@ -739,17 +740,17 @@
     }
   };
   // ผู้ดูแลพิมพ์สรุปผล / ทั้งเล่มของผู้ทดสอบแต่ละท่าน (ใช้ผลจากแดชบอร์ด)
-  $('dTesters').onclick = e => {
-    const b = e.target.closest('button[data-pu]');
-    if (!b || !dash) return;
-    const t = dash.testers.find(x => x.username === b.dataset.pu);
-    if (!t) return;
+  function printTester(mode) {
+    const t = dash && dash.testers.find(x => x.username === $('dPrintWho').value);
+    if (!t) return toast('เลือกผู้ทดสอบก่อน');
     const res = {}; dash.results.filter(r => r.user === t.username).forEach(r => { res[r.code] = r; });
     const od = (dash.current.days && dash.current.days.length) ? dash.current.days : TEST_DAYS.slice(0, 1);
     const list = LIST.filter(c => !c.slot || od.some(x => c.slot.indexOf(x) >= 0) || (res[c.code] || {}).v);
     const answers = {}; (dash.answers || []).filter(x => x.user === t.username).forEach(x => { answers[x.code] = x; });
-    doPrint(b.dataset.pm, { u: t, res, list, shots: {}, answers, sys: $('dPrintSys').value });
-  };
+    doPrint(mode, { u: t, res, list, shots: {}, answers, sys: $('dPrintSys').value });
+  }
+  $('dPrintSum').onclick = () => printTester('summary');
+  $('dPrintAll').onclick = () => printTester('full');
 
   // ======================================================================= ฉบับพิมพ์
   // who = ผลของผู้ทดสอบที่จะพิมพ์ (ค่าเริ่มต้น = ผู้ใช้ที่เข้าระบบ) · who.sys = พิมพ์เฉพาะระบบ (ว่าง = ทุกระบบ)
