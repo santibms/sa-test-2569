@@ -126,7 +126,7 @@
     });
     // ผู้ทดสอบเห็นเฉพาะข้อของวันที่เปิดให้ทดสอบ (ผู้ดูแลเห็นทุกข้อ) ข้อที่บันทึกแล้วยังแสดงเสมอ
     const days = openDays(), admin = session && session.user.role === 'admin';
-    LIST = out.filter(c => admin || !c.slot || days.some(d => c.slot.indexOf(d) === 0) || ((state && state.res[c.code]) || {}).v);
+    LIST = out.filter(c => admin || !c.slot || days.some(d => c.slot.indexOf(d) >= 0) || ((state && state.res[c.code]) || {}).v);
     if (!LIST.length) LIST = out;
   }
   const TEST_DAYS = ['5 ต.ค. 2569', '6 ต.ค. 2569', '7 ต.ค. 2569', '8 ต.ค. 2569'];
@@ -573,7 +573,7 @@
   function renderDash() {
     // นับเฉพาะข้อของวันที่เปิดให้ทดสอบ
     const d = dash, od = (d.current.days && d.current.days.length) ? d.current.days : TEST_DAYS.slice(0, 1);
-    const cases = d.cases.filter(c => c.show && (!c.slot || od.some(x => c.slot.indexOf(x) === 0))), codes = {}, names = {};
+    const cases = d.cases.filter(c => c.show && (!c.slot || od.some(x => c.slot.indexOf(x) >= 0))), codes = {}, names = {};
     cases.forEach(c => { codes[c.code] = c; });
     d.testers.forEach(t => { names[t.username] = t.full; });
     const results = d.results.filter(r => codes[r.code]);

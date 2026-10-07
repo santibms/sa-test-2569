@@ -1,6 +1,6 @@
 // สร้างจาก tools/build_web_app.py ห้ามแก้ไฟล์นี้โดยตรง
 window.SA_DATA = {
-"built": "2026-10-07 07:21",
+"built": "2026-10-07 10:04",
 "db": "โรงพยาบาลน่าน ทดสอบ",
 "systems": [
 {
@@ -3904,8 +3904,8 @@ window.SA_DATA = {
 "หน้าจอ การจับคู่ 3 ทาง (Herbal ERP)"
 ],
 "HB-27": [
-"img/hb_approvals.jpg",
-"หน้าจอ แดชบอร์ดการอนุมัติ (Herbal ERP)"
+"img/hb_ap_inv_list.jpg",
+"หน้าจอ บัญชีเจ้าหนี้ › ใบแจ้งหนี้ผู้ขาย (Herbal ERP)"
 ],
 "HB-28": [
 "img/hb_tb.jpg",
