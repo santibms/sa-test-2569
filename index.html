@@ -86,6 +86,7 @@
   .side { position: sticky; top: 76px; max-height: calc(100vh - 92px); display: flex; flex-direction: column; gap: 12px; }
   .who { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 14.5px; }
   .who .k { font-size: 13px; color: var(--muted); } .who .name { font-weight: 600; } .who .ver { color: var(--brand-d); font-weight: 600; }
+  .who .vk { color: var(--muted); font-weight: 400; font-size: 13px; }
   .toc { background: #fff; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; min-height: 0; flex: 1; }
   .toc .search { padding: 8px 10px; border-bottom: 1px solid var(--label); }
   .toc .search input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 15px; }
@@ -402,7 +403,7 @@
     <aside class="side" id="side" aria-label="ข้อทดสอบ">
       <div class="who">
         <div class="k">ผู้ทดสอบ</div><div class="name" id="whoName"></div><div class="muted" id="whoOrg"></div>
-        <div class="k" style="margin-top:6px">รุ่นโปรแกรมปัจจุบัน</div><div class="ver" id="curVer">-</div>
+        <div class="k" style="margin-top:6px">รุ่นโปรแกรมปัจจุบัน</div><div class="ver"><span class="vk">Smart Accounting</span> <span id="curVer">-</span></div><div class="ver" id="curVerHBRow" hidden><span class="vk">Herbal ERP</span> <span id="curVerHB">-</span></div>
       </div>
       <nav class="toc">
         <div class="search">
@@ -436,7 +437,8 @@
       <div><h2>แดชบอร์ดสรุปผลการทดสอบ</h2><span class="muted" id="dTime"></span></div>
       <div class="dash-act">
         <div class="verset" id="dDays">เปิดให้ทดสอบ</div>
-        <label class="verset">รุ่นโปรแกรมปัจจุบัน <input id="dVer" placeholder="เช่น v1.179.0" aria-label="รุ่นโปรแกรมปัจจุบัน"><button class="btn" id="dVerSave">บันทึกรุ่น</button></label>
+        <label class="verset">รุ่น Smart Accounting <input id="dVer" placeholder="เช่น v1.181.0" aria-label="รุ่นโปรแกรม BMS Smart Accounting"><button class="btn" id="dVerSave">บันทึกรุ่น</button></label>
+        <label class="verset">รุ่น Herbal ERP <input id="dVerHB" placeholder="เช่น v1.6.23" aria-label="รุ่นโปรแกรม Herbal ERP"><button class="btn" id="dVerHBSave">บันทึกรุ่น</button></label>
         <button class="btn" id="dRefresh">รีเฟรช</button>
         <button class="btn" id="dPdf" title="พิมพ์ หรือบันทึกเป็น PDF">พิมพ์ / PDF</button>
         <button class="btn" id="dImg" title="บันทึกหน้าแดชบอร์ดเป็นรูปภาพ PNG">บันทึกเป็นรูปภาพ</button><a class="btn" id="dSheet" target="_blank" rel="noopener">เปิด Google Sheet</a><button class="btn primary" id="dBack">กลับไปหน้าบันทึกผล</button></div>
@@ -459,7 +461,7 @@
 <div id="print-area"></div>
 
 <script src="config.js"></script>
-<script src="cases.js?v=20261008-0521"></script>
-<script src="app.js?v=20261008-0521"></script>
+<script src="cases.js?v=20261008-0527"></script>
+<script src="app.js?v=20261008-0527"></script>
 </body>
 </html>

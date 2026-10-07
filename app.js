@@ -129,6 +129,7 @@
     const days = openDays(), admin = session && session.user.role === 'admin';
     LIST = out.filter(c => admin || !c.slot || days.some(d => c.slot.indexOf(d) >= 0) || ((state && state.res[c.code]) || {}).v);
     if (!LIST.length) LIST = out;
+    if (state && state.current) showVers();   // แถว Herbal ERP แสดงเมื่อมีข้อของ Herbal ในรายการ
     const ps = $('printSys'), pk = ps.value, sy = LIST.map(c => c.sysName).filter((g, i, a) => a.indexOf(g) === i);
     ps.innerHTML = '<option value="">พิมพ์ทุกระบบ</option>' + sy.map(g => `<option value="${esc(g)}" ${g === pk ? 'selected' : ''}>${esc(g)}</option>`).join('');
   }
@@ -149,16 +150,26 @@
     const m = /^(\d+) ต\.ค\. 2569/.exec(c.slot || '');
     return m ? m[1] + ' ต.ค. 2569' : DAYS[0];
   }
+  // ระบบ Herbal ERP มีเลขรุ่นของตัวเอง แยกจาก BMS Smart Accounting
+  function isHB(c) { return /Herbal/.test((c && c.sysName) || ''); }
+  function curVerOf(c) { return ((isHB(c) ? state.current.verHB : state.current.ver) || '').trim(); }
+  function showVers() {
+    $('curVer').textContent = (state.current.ver || '').trim() || '-';
+    $('curVerHB').textContent = state.current.verHB || '-';
+    $('curVerHBRow').hidden = !LIST.some(isHB);
+  }
   function applyCurrent(cu) {
     if (cu && cu.days && JSON.stringify(cu.days) !== JSON.stringify(state.current.days || [])) {
       state.current.days = cu.days; persist();
       if (session) { buildList(state.serverCases); if (!$('app').hidden) render(); }
     }
-    if (!cu || !cu.ver || state.current.ver === cu.ver) return;
-    state.current.ver = cu.ver; persist();
-    $('curVer').textContent = cu.ver;
+    if (!cu) return;
+    const vb = (cu.ver || '').trim(), vh = (cu.verHB || '').trim();
+    if ((!vb || vb === state.current.ver) && vh === (state.current.verHB || '')) return;
+    if (vb) state.current.ver = vb;
+    state.current.verHB = vh; persist(); showVers();
     const c = cur(), r = state.res[c.code] || {};
-    if (!r.ver && $('ver') && document.activeElement !== $('ver')) $('ver').value = cu.ver;
+    if (!r.ver && $('ver') && document.activeElement !== $('ver')) $('ver').value = curVerOf(c);
   }
   function persist() {
     if (!session) return;
@@ -237,6 +248,7 @@
     const u = session.user;
     state = Object.assign({ code: '', res: {}, current: { ver: '' }, serverCases: null }, store.get(KEY.state(u.username), {}));
     if (current && current.ver) state.current.ver = current.ver;
+    if (current) state.current.verHB = (current.verHB || '').trim();
     if (current && current.days && current.days.length) state.current.days = current.days;   // วันที่เปิดให้ทดสอบจากการเข้าระบบ (ไม่ใช่ค่าเก่าในเครื่อง)
     outbox = store.get(KEY.outbox(u.username), []);
     buildList(state.serverCases);
@@ -244,7 +256,7 @@
     $('auth').hidden = true; $('app').hidden = false;
     $('uname').textContent = u.full; $('whoName').textContent = u.full; $('whoOrg').textContent = u.org || '';
     $('av').textContent = (u.full.replace(/^(นาย|นางสาว|นาง|ดร\.|ผศ\.|รศ\.)\s*/, '').trim().charAt(0) || '?');
-    $('curVer').textContent = state.current.ver || '-';
+    showVers();
     $('dashBtn').hidden = u.role !== 'admin';
     showWelcome(fresh, true);
     render();
@@ -255,6 +267,7 @@
       state.serverCases = j.cases || null;
       myAnswers = {}; (j.answers || []).forEach(a => { myAnswers[a.code] = a; });
       if (j.current) { if (j.current.days && j.current.days.length) state.current.days = j.current.days; if (j.current.ver) { state.current.ver = j.current.ver; $('curVer').textContent = j.current.ver; } }
+      if (j.current) { state.current.verHB = (j.current.verHB || '').trim(); showVers(); }
       const pend = {}; outbox.forEach(o => { pend[o.code] = true; });
       const merged = {};
       Object.keys(j.results || {}).forEach(code => { merged[code] = j.results[code]; });
@@ -360,7 +373,7 @@
     renderTop(); renderToc();
     const c = cur(), r = state.res[c.code] || {}, i = idxOf(c.code), ti = TYPE_INFO[c.type] || TYPE_INFO.Positive;
     const row = (k, v) => `<tr><th>${k}</th><td>${v}</td></tr>`;
-    const day = r.day || defaultDay(c), ver = r.ver || state.current.ver || '';
+    const day = r.day || defaultDay(c), ver = r.ver || curVerOf(c) || '';
     $('sheet').innerHTML = `
       <div class="sh-hd"><span>${esc(c.sysName)} · ${esc(c.sec)}</span><span>${esc(c.slot)}</span></div>
       <h1><span class="code">${esc(c.code)}</span>${esc(c.task)}</h1>
@@ -417,7 +430,7 @@
   function stamp(code) {
     const rr = res(code), c = LIST[idxOf(code)];
     if (!rr.day) rr.day = $('day') ? $('day').value : defaultDay(c);
-    if (!rr.ver) rr.ver = ($('ver') && $('ver').value.trim()) || state.current.ver || '';
+    if (!rr.ver) rr.ver = ($('ver') && $('ver').value.trim()) || curVerOf(c) || '';
     rr._dirty = true;
   }
   function setSaved(cls, txt) { const el = $('saved'); if (el) { el.className = 'saved ' + cls; el.textContent = txt; } }
@@ -589,7 +602,8 @@
     const total = people.length * cases.length;
     $('dTime').textContent = 'ข้อมูลล่าสุด ' + fmtDT(d.time) + ' น. · รีเฟรชอัตโนมัติทุก 1 นาที · นับเฉพาะข้อของวันที่เปิดให้ทดสอบ (' + od.map(x => x.replace(' 2569', '')).join(', ') + ')';
     $('dSheet').href = d.sheetUrl;
-    if (document.activeElement !== $('dVer')) $('dVer').value = d.current.ver || '';
+    if (document.activeElement !== $('dVer')) $('dVer').value = (d.current.ver || '').trim();
+    if (document.activeElement !== $('dVerHB')) $('dVerHB').value = d.current.verHB || '';
     $('dDays').innerHTML = 'เปิดให้ทดสอบ ' + TEST_DAYS.map(x => `<label class="dck"><input type="checkbox" value="${x}" ${od.indexOf(x) >= 0 ? 'checked' : ''}>${x.replace(' 2569', '')}</label>`).join('')
       + '<button class="btn" id="dDaysSave">บันทึกวัน</button>';
     $('dDaysSave').onclick = saveDays;
@@ -703,17 +717,19 @@
       await loadDash();
     } catch (e) { if (e.code === 'AUTH') return expire(e.message); toast('บันทึกไม่สำเร็จ: ' + errText(e)); }
   }
-  $('dVerSave').onclick = async () => {
-    const ver = $('dVer').value.trim();
+  async function saveVer(product, input, btn) {
+    const ver = $(input).value.trim(), name = product === 'herbal' ? 'Herbal ERP' : 'BMS Smart Accounting';
     if (!ver) return toast('กรุณากรอกรุ่นโปรแกรม');
-    const btn = $('dVerSave'); btn.disabled = true;
+    btn = $(btn); btn.disabled = true;
     try {
-      await call('setCurrent', { token: session.token, ver });
-      toast('ตั้งรุ่นโปรแกรมปัจจุบันเป็น ' + ver + ' แล้ว ข้อที่ทดสอบหลังจากนี้จะใช้รุ่นนี้');
+      await call('setCurrent', { token: session.token, ver, product });
+      toast('ตั้งรุ่น ' + name + ' เป็น ' + ver + ' แล้ว ข้อที่ทดสอบหลังจากนี้จะใช้รุ่นนี้');
       await loadDash();
     } catch (e) { if (e.code === 'AUTH') return expire(e.message); toast('บันทึกรุ่นไม่สำเร็จ: ' + errText(e)); }
     btn.disabled = false;
-  };
+  }
+  $('dVerSave').onclick = () => saveVer('bms', 'dVer', 'dVerSave');
+  $('dVerHBSave').onclick = () => saveVer('herbal', 'dVerHB', 'dVerHBSave');
   $('dSysF').onchange = () => { if (dash) renderDash(); };
   $('dIssueSys').onchange = () => { if (dash) renderDash(); };
   // คำชี้แจงของผู้ดูแลต่อข้อที่ไม่ผ่าน/ติดปัญหา (ผู้ทดสอบอาจไม่ทราบวิธีดูข้อมูลที่ถูกต้อง)
