@@ -587,6 +587,9 @@
       $('dTime').textContent = dash ? 'ข้อมูลล่าสุด ' + fmtDT(dash.time) + ' น.' : '';
     }
   }
+  // สถานะการแก้ไขที่ผู้ดูแลกำหนดให้แต่ละประเด็น (ผลของผู้ทดสอบคงเดิม) · 2 แบบแรกนับเป็น "ปิดประเด็นแล้ว"
+  const AST = { fixed: ['แก้ไขแล้ว', 'pass'], works: ['ระบบทำได้ (ตามคำชี้แจง)', 'pass'], wip: ['อยู่ระหว่างแก้ไข', 'block'], suggest: ['ข้อเสนอแนะ (พัฒนาต่อ)', 'sug'] };
+  const AST_DONE = { fixed: 1, works: 1 };
   function renderDash() {
     // นับเฉพาะข้อของวันที่เปิดให้ทดสอบ
     const d = dash, od = (d.current.days && d.current.days.length) ? d.current.days : TEST_DAYS.slice(0, 1);
@@ -636,20 +639,27 @@
     isel.innerHTML = '<option value="">ทุกระบบ</option>' + isys.map(g => `<option value="${esc(g)}" ${g === ikeep ? 'selected' : ''}>${esc(g)} (${issues.filter(r => codes[r.code].sysName === g).length})</option>`).join('');
     const AK = {}; (d.answers || []).forEach(a => { AK[a.user + '|' + a.code] = a; });
     const dr = $('ansTxt'); if (dr) ansDraft = dr.value;   // เก็บข้อความที่กำลังพิมพ์ไว้ ถ้ามีการวาดใหม่
+    const ds = $('ansSt'); if (ds) ansDraftSt = ds.value;
+    const stOf = r => (AK[r.user + '|' + r.code] || {}).st || '', hasA = r => !!AK[r.user + '|' + r.code];
+    const stF = $('dIssueSt').value;
+    const stOk = r => !stF || (stF === 'none' ? !hasA(r) : stF === 'done' ? !!AST_DONE[stOf(r)] : stOf(r) === stF);
+    const stPill = r => { const s = stOf(r); return s ? `<span class="pill st ${AST[s][1]}">${AST[s][0]}</span>` : ''; };
     const ansCell = r => {
       const k = r.user + '|' + r.code, a = AK[k];
-      if (ansEdit === k) return `<div class="ans-ed"><textarea id="ansTxt" rows="3" placeholder="เช่น ระบบทำได้ โดยเข้าเมนู … / วิธีดูข้อมูลที่ถูกต้องคือ … / แก้ไขแล้วในรุ่น …">${esc(ansDraft)}</textarea>
+      if (ansEdit === k) return `<div class="ans-ed"><select id="ansSt" aria-label="สถานะการแก้ไข"><option value="">— สถานะการแก้ไข —</option>${Object.keys(AST).map(s => `<option value="${s}" ${s === ansDraftSt ? 'selected' : ''}>${AST[s][0]}</option>`).join('')}</select><textarea id="ansTxt" rows="3" placeholder="เช่น ระบบทำได้ โดยเข้าเมนู … / วิธีดูข้อมูลที่ถูกต้องคือ … / แก้ไขแล้วในรุ่น …">${esc(ansDraft)}</textarea>
         <div><button class="btn primary sm" data-ans-save="${esc(k)}">บันทึกคำชี้แจง</button> <button class="btn sm" data-ans-cancel="1">ยกเลิก</button></div></div>`;
-      return a ? `<div class="ans"><b>คำชี้แจงผู้ดูแล:</b> ${esc(a.text).replace(/\n/g, '<br>')}<small>${esc(a.by)} · ${fmtDT(a.t)} น. <button class="ans-btn" data-ans="${esc(k)}">แก้ไข</button></small></div>`
+      return a ? `<div class="ans"><b>คำชี้แจงผู้ดูแล:</b> ${esc(a.text || '-').replace(/\n/g, '<br>')}<small>${esc(a.by)} · ${fmtDT(a.t)} น. <button class="ans-btn" data-ans="${esc(k)}">แก้ไข</button></small></div>`
                : `<div><button class="ans-btn" data-ans="${esc(k)}">+ เพิ่มคำชี้แจง / วิธีที่ถูกต้อง</button></div>`;
     };
     let ino = 0;
-    $('dIssueN').textContent = issues.length ? `(${issues.length} รายการ)` : '';
+    const nDone = issues.filter(r => AST_DONE[stOf(r)]).length, nWip = issues.filter(r => stOf(r) === 'wip').length,
+          nSug = issues.filter(r => stOf(r) === 'suggest').length, nNone = issues.filter(r => !hasA(r)).length;
+    $('dIssueN').textContent = issues.length ? `(${issues.length} รายการ · ปิดประเด็นแล้ว ${nDone} · อยู่ระหว่างแก้ไข ${nWip} · ข้อเสนอแนะ ${nSug} · ยังไม่ชี้แจง ${nNone})` : '';
     $('dIssues').innerHTML = issues.length ? `<table><thead><tr><th class="n">ลำดับ</th><th>เวลา</th><th>ผู้ทดสอบ</th><th>ข้อ</th><th>โจทย์</th><th>ผล</th><th>ผลที่ได้จริง / ปัญหาที่พบ</th><th>วันที่ / รุ่น</th><th>ภาพ</th></tr></thead><tbody>`
       + (isel.value ? [isel.value] : isys).map(g => {
-        const rs = issues.filter(r => codes[r.code].sysName === g);
-        return `<tr class="igrp"><td colspan="9">${esc(g)} · ${rs.length} รายการ</td></tr>` + rs.map(r => `<tr><td class="n">${++ino}</td><td>${fmtDT(r.t)}</td><td>${esc(names[r.user] || r.user)}</td><td><b>${esc(r.code)}</b></td><td>${esc(codes[r.code].task)}</td>
-          <td><span class="pill ${r.v}">${SHORT[r.v]}</span></td><td>${esc(r.note) || '<span class="muted">-</span>'}${ansCell(r)}</td><td>${esc(r.day)}<br>${esc(r.ver)}</td>
+        const rs = issues.filter(r => codes[r.code].sysName === g && stOk(r));
+        return !rs.length ? '' : `<tr class="igrp"><td colspan="9">${esc(g)} · ${rs.length} รายการ</td></tr>` + rs.map(r => `<tr><td class="n">${++ino}</td><td>${fmtDT(r.t)}</td><td>${esc(names[r.user] || r.user)}</td><td><b>${esc(r.code)}</b></td><td>${esc(codes[r.code].task)}</td>
+          <td><span class="pill ${r.v}">${SHORT[r.v]}</span>${stPill(r)}</td><td>${esc(r.note) || '<span class="muted">-</span>'}${ansCell(r)}</td><td>${esc(r.day)}<br>${esc(r.ver)}</td>
           <td>${r.img.map((u, k) => `<a href="${esc(u)}" target="_blank" rel="noopener">${k + 1}</a>`).join(' ') || '-'}</td></tr>`).join('');
       }).join('') + '</tbody></table>'
       : '<span class="muted">ยังไม่มีข้อที่ไม่ผ่านหรือติดปัญหา</span>';
@@ -732,26 +742,27 @@
   $('dVerHBSave').onclick = () => saveVer('herbal', 'dVerHB', 'dVerHBSave');
   $('dSysF').onchange = () => { if (dash) renderDash(); };
   $('dIssueSys').onchange = () => { if (dash) renderDash(); };
+  $('dIssueSt').onchange = () => { if (dash) renderDash(); };
   // คำชี้แจงของผู้ดูแลต่อข้อที่ไม่ผ่าน/ติดปัญหา (ผู้ทดสอบอาจไม่ทราบวิธีดูข้อมูลที่ถูกต้อง)
-  let ansEdit = null, ansDraft = '';
+  let ansEdit = null, ansDraft = '', ansDraftSt = '';
   $('dIssues').onclick = async e => {
     const b = e.target.closest('button');
     if (!b || !dash) return;
     if (b.dataset.ans) {
       const a = (dash.answers || []).find(x => x.user + '|' + x.code === b.dataset.ans);
-      ansEdit = b.dataset.ans; ansDraft = a ? a.text : ''; renderDash();
+      ansEdit = b.dataset.ans; ansDraft = a ? a.text : ''; ansDraftSt = a ? (a.st || '') : ''; renderDash();
       const t = $('ansTxt'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
     } else if (b.dataset.ansCancel) {
-      ansEdit = null; ansDraft = ''; renderDash();
+      ansEdit = null; ansDraft = ''; ansDraftSt = ''; renderDash();
     } else if (b.dataset.ansSave) {
-      const k = b.dataset.ansSave, i = k.indexOf('|'), user = k.slice(0, i), code = k.slice(i + 1), text = ($('ansTxt').value || '').trim();
+      const k = b.dataset.ansSave, i = k.indexOf('|'), user = k.slice(0, i), code = k.slice(i + 1), text = ($('ansTxt').value || '').trim(), status = $('ansSt').value;
       b.disabled = true;
       try {
-        const j = await call('answer', { token: session.token, user, code, text });
+        const j = await call('answer', { token: session.token, user, code, text, status });
         dash.answers = (dash.answers || []).filter(x => !(x.user === user && x.code === code));
-        if (text) dash.answers.push(j.answer);
-        ansEdit = null; ansDraft = ''; renderDash();
-        toast(text ? 'บันทึกคำชี้แจงแล้ว' : 'ลบคำชี้แจงแล้ว');
+        if (text || status) dash.answers.push(j.answer);
+        ansEdit = null; ansDraft = ''; ansDraftSt = ''; renderDash();
+        toast(text || status ? 'บันทึกคำชี้แจงแล้ว' : 'ลบคำชี้แจงแล้ว');
       } catch (er) { if (er.code === 'AUTH') return expire(er.message); b.disabled = false; toast('บันทึกไม่สำเร็จ: ' + errText(er)); }
     }
   };
@@ -778,7 +789,7 @@
     const mark = (r, v) => `<span class="mark">${r.v === v ? '☑' : '☐'} ${LABEL[v]}</span>`;
     const row = (k, html) => `<tr><th class="l">${k}</th><td>${html}</td></tr>`;
     const blk = (cap, inner) => `<div class="blk"><div class="cap">${cap}</div>${inner}</div>`;
-    const ans = code => ANS[code] && ANS[code].text ? esc(ANS[code].text).replace(/\n/g, '<br>') : '';
+    const ans = code => { const a = ANS[code]; if (!a || !(a.text || a.st)) return ''; return (a.st && AST[a.st] ? '[' + AST[a.st][0] + '] ' : '') + esc(a.text || '').replace(/\n/g, '<br>'); };
     const pages = mode !== 'full' ? [] : PL.map((c, k) => {
       const r = RES[c.code] || {}, ti = TYPE_INFO[c.type] || TYPE_INFO.Positive;
       return `<div class="p-page p">${hd(c.sysName)}

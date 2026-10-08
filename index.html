@@ -193,6 +193,8 @@
   .ans small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
   .ans-btn { all: unset; cursor: pointer; color: var(--brand-d); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; margin-top: 4px; display: inline-block; }
   .ans small .ans-btn { margin: 0 0 0 6px; }
+  .pill.st { display: inline-block; margin-top: 6px; } .pill.sug { background: #eef1f6; color: #4a5568; }   /* สถานะการแก้ไข */
+  .ans-ed select { display: block; margin-top: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font-size: 14px; background: #fff; }
   .ans-ed textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 14px; margin: 6px 0 4px; }
   .dash-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; }
   .sys-btn { min-height: 38px; padding: 6px 12px; white-space: nowrap; text-decoration: none; }
@@ -449,7 +451,7 @@
       <div class="card"><h3>ความคืบหน้าของผู้ทดสอบ</h3><div class="ptools dact"><span class="pl">พิมพ์ผลรายบุคคล</span><select id="dPrintWho" aria-label="ผู้ทดสอบที่จะพิมพ์"></select><select id="dPrintSys" aria-label="ระบบที่จะพิมพ์"></select><button class="btn" id="dPrintSum">พิมพ์สรุปผล</button><button class="btn" id="dPrintAll">พิมพ์ทั้งเล่ม</button></div><div class="scroll" id="dTesters"></div></div>
       <div class="card"><h3>ผลรวมตามระบบ (ทุกท่านรวมกัน)</h3><div class="scroll" id="dSys"></div></div>
     </div>
-    <div class="card"><h3>ข้อที่ไม่ผ่าน / ติดปัญหา <span class="muted" id="dIssueN"></span></h3><div class="mtools"><select id="dIssueSys" aria-label="เลือกระบบ"></select><span class="dact">กด "เพิ่มคำชี้แจง" เพื่อบันทึกเหตุผล วิธีที่ถูกต้อง หรือสิ่งที่แก้ไขแล้ว ของแต่ละข้อ</span></div><div class="scroll" id="dIssues"></div></div>
+    <div class="card"><h3>ข้อที่ไม่ผ่าน / ติดปัญหา <span class="muted" id="dIssueN"></span></h3><div class="mtools"><select id="dIssueSys" aria-label="เลือกระบบ"></select><select id="dIssueSt" aria-label="สถานะการแก้ไข"><option value="">ทุกสถานะ</option><option value="none">ยังไม่ชี้แจง</option><option value="wip">อยู่ระหว่างแก้ไข</option><option value="suggest">ข้อเสนอแนะ (พัฒนาต่อ)</option><option value="done">ปิดประเด็นแล้ว</option></select><span class="dact">กด "เพิ่มคำชี้แจง" เพื่อบันทึกเหตุผล วิธีที่ถูกต้อง หรือสิ่งที่แก้ไขแล้ว ของแต่ละข้อ</span></div><div class="scroll" id="dIssues"></div></div>
     <div class="card"><h3>ผลรายข้อ × ผู้ทดสอบ</h3>
       <div class="mtools"><select id="dSysF" aria-label="เลือกระบบ"></select><span class="mleg"><b class="m pass">✓</b> ผ่าน <b class="m fail">✗</b> ไม่ผ่าน <b class="m block">!</b> ติดปัญหา <b class="m">·</b> ยังไม่ทำ · ชี้ที่ช่องเพื่อดูผลที่ได้จริง</span></div>
       <div class="scroll" id="dMatrix"></div></div>
@@ -461,7 +463,7 @@
 <div id="print-area"></div>
 
 <script src="config.js"></script>
-<script src="cases.js?v=20261008-0527"></script>
-<script src="app.js?v=20261008-0527"></script>
+<script src="cases.js?v=20261008-0700"></script>
+<script src="app.js?v=20261008-0700"></script>
 </body>
 </html>
